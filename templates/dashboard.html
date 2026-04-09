@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Usage Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 24px; }
+  h1 { font-size: 1.6rem; color: #f0f6fc; margin-bottom: 4px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #21262d; padding-bottom: 16px; }
+  .header-left { display: flex; flex-direction: column; }
+  .header-subtitle { color: #8b949e; font-size: 0.85rem; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .controls select, .controls input { background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; }
+  .controls label { font-size: 0.8rem; color: #8b949e; }
+
+  /* Budget gauges */
+  .gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .gauge { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 16px; }
+  .gauge-label { font-size: 0.8rem; color: #8b949e; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .gauge-bar { height: 10px; background: #21262d; border-radius: 5px; overflow: hidden; }
+  .gauge-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+  .gauge-fill.green { background: linear-gradient(90deg, #238636, #2ea043); }
+  .gauge-fill.yellow { background: linear-gradient(90deg, #d29922, #e3b341); }
+  .gauge-fill.red { background: linear-gradient(90deg, #da3633, #f85149); }
+  .gauge-fill.neutral { background: linear-gradient(90deg, #30363d, #8b949e); }
+  .gauge-value { font-size: 1.4rem; font-weight: 600; color: #f0f6fc; margin-bottom: 2px; }
+
+  /* Card grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 20px; }
+  .card h3 { font-size: 0.95rem; color: #f0f6fc; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h3 .icon { font-size: 1.1rem; }
+  .chart-container { position: relative; height: 260px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { text-align: left; color: #8b949e; font-weight: 500; padding: 8px 12px; border-bottom: 1px solid #21262d; }
+  td { padding: 8px 12px; border-bottom: 1px solid #161b22; }
+  tr:hover td { background: #1c2128; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500; }
+  .badge-opus { background: #3b1f6e; color: #d2a8ff; }
+  .badge-sonnet { background: #1a3a2a; color: #7ee787; }
+  .badge-haiku { background: #1a2a3a; color: #79c0ff; }
+  .badge-unknown { background: #21262d; color: #8b949e; }
+  .pct-bar { display: inline-block; height: 6px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+
+  /* Session drill-down */
+  .session-panel { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+  .session-panel h3 { font-size: 0.95rem; color: #f0f6fc; margin-bottom: 12px; }
+  .session-header-row { display: grid; grid-template-columns: 140px 180px 1fr 80px 120px 70px; gap: 12px; padding: 8px 0; border-bottom: 1px solid #21262d; font-size: 0.8rem; color: #8b949e; font-weight: 500; }
+  .session-row { display: grid; grid-template-columns: 140px 180px 1fr 80px 120px 70px; gap: 12px; padding: 10px 0; border-bottom: 1px solid #21262d; font-size: 0.85rem; align-items: center; }
+  .session-row:last-child { border-bottom: none; }
+  .project-name { color: #ffa657; font-size: 0.8rem; }
+  .session-time { color: #8b949e; }
+  .session-agents { display: flex; gap: 4px; flex-wrap: wrap; }
+  .agent-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; background: #21262d; color: #c9d1d9; }
+  .mini-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; }
+  .mini-bar .opus { background: #8b5cf6; }
+  .mini-bar .sonnet { background: #2ea043; }
+  .mini-bar .haiku { background: #58a6ff; }
+  .mini-bar .unknown { background: #8b949e; }
+
+  .empty-state { color: #8b949e; font-size: 0.85rem; font-style: italic; padding: 16px 0; }
+  .drill-hint { font-size: 0.75rem; color: #8b949e; font-style: italic; margin-top: 8px; }
+  .clickable { cursor: pointer; }
+  .clickable:hover td { background: #1c2128; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Claude Code Usage</h1>
+    <span class="header-subtitle" id="subtitleTs">Generated: {{ generated_at }}</span>
+  </div>
+  <div class="controls">
+    <div>
+      <label>Period</label><br>
+      <select id="periodSelect" onchange="applyFilter()">
+        <option value="5h">Last 5 hours</option>
+        <option value="7d" selected>Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+        <option value="all">All time</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Budget Gauges -->
+<div class="gauges" id="gaugesSection">
+  <!-- rendered by JS -->
+</div>
+
+<!-- Row 1: Model breakdown -->
+<div class="grid-2">
+  <div class="card">
+    <h3><span class="icon">&#x1f4ca;</span> Token Distribution by Model</h3>
+    <div class="chart-container">
+      <canvas id="modelDonut"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <h3><span class="icon">&#x1f4c8;</span> Daily Token Usage by Model</h3>
+    <div class="chart-container">
+      <canvas id="dailyStacked"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Row 2: Agent breakdown -->
+<div class="grid-2">
+  <div class="card">
+    <h3><span class="icon">&#x1f916;</span> Tokens by Agent</h3>
+    <div class="chart-container">
+      <canvas id="agentBar"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <h3><span class="icon">&#x1f916;</span> Agent Details</h3>
+    <table id="agentTable">
+      <thead>
+        <tr><th>Agent</th><th>Model</th><th>Tokens</th><th>% Total</th><th>Sessions</th></tr>
+      </thead>
+      <tbody id="agentTableBody">
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Row 3: Skills + Projects -->
+<div class="grid-2">
+  <div class="card">
+    <h3><span class="icon">&#x26a1;</span> Skill Invocations</h3>
+    <div class="chart-container">
+      <canvas id="skillBar"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <h3><span class="icon">&#x1f4c1;</span> Tokens by Project</h3>
+    <div class="chart-container">
+      <canvas id="projectBar"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Session drill-down -->
+<div class="session-panel">
+  <h3>&#x1f50d; Session Drill-Down</h3>
+  <div id="sessionContainer">
+    <div class="session-header-row">
+      <div>Time</div><div>Project</div><div>Agents</div><div>Tokens</div><div>Model Split</div><div>Duration</div>
+    </div>
+    <div id="sessionRows"></div>
+  </div>
+</div>
+
+<script>
+const DATA = {{ data_json | safe }};
+const LIMITS = {{ limits_json | safe }};
+
+// Color palette
+const OPUS    = '#8b5cf6';
+const SONNET  = '#2ea043';
+const HAIKU   = '#58a6ff';
+const UNKNOWN = '#8b949e';
+const GRID    = '#21262d';
+const TEXT    = '#8b949e';
+
+Chart.defaults.color = TEXT;
+Chart.defaults.borderColor = GRID;
+
+// Chart instances — stored so we can destroy/recreate on filter change
+let charts = {};
+
+function modelColor(model) {
+  if (!model) return UNKNOWN;
+  const m = model.toLowerCase();
+  if (m.includes('opus'))   return OPUS;
+  if (m.includes('sonnet')) return SONNET;
+  if (m.includes('haiku'))  return HAIKU;
+  return UNKNOWN;
+}
+
+function modelBadgeClass(model) {
+  if (!model) return 'badge-unknown';
+  const m = model.toLowerCase();
+  if (m.includes('opus'))   return 'badge-opus';
+  if (m.includes('sonnet')) return 'badge-sonnet';
+  if (m.includes('haiku'))  return 'badge-haiku';
+  return 'badge-unknown';
+}
+
+function fmtTokens(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000)    return Math.round(n / 1000) + 'K';
+  return String(n);
+}
+
+function fmtDuration(minutes) {
+  if (minutes === null || minutes === undefined) return '—';
+  const m = Math.round(minutes);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem > 0 ? h + 'h ' + rem + 'm' : h + 'h';
+}
+
+function getWindowStart(period) {
+  const now = new Date();
+  if (period === '5h')  return new Date(now.getTime() - 5  * 60 * 60 * 1000);
+  if (period === '7d')  return new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
+  if (period === '30d') return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  return null; // all time
+}
+
+function filterSessions(period) {
+  const cutoff = getWindowStart(period);
+  if (!cutoff) return DATA.sessions;
+  return DATA.sessions.filter(s => new Date(s.start_time) >= cutoff);
+}
+
+// Re-aggregate filtered sessions into the same shape as DATA fields
+function reAggregate(sessions) {
+  const byModel   = {};
+  const byAgent   = {};
+  const bySkill   = {};
+  const byProject = {};
+  const byDay     = {};
+  let totalTokens = 0;
+
+  // For session-only slices we don't have per-message skill data,
+  // so for skills we fall back to the full DATA (not time-filterable at this layer).
+  // We do our best with what we have in session summaries.
+
+  for (const s of sessions) {
+    totalTokens += s.total_tokens;
+
+    // by_project
+    if (!byProject[s.project]) byProject[s.project] = { total_tokens: 0, session_count: 0 };
+    byProject[s.project].total_tokens += s.total_tokens;
+    byProject[s.project].session_count += 1;
+
+    // by_model (from model_split)
+    for (const [model, tokens] of Object.entries(s.model_split || {})) {
+      if (!byModel[model]) byModel[model] = { total_tokens: 0 };
+      byModel[model].total_tokens += tokens;
+    }
+
+    // by_day (from start_time)
+    const day = s.start_time.slice(0, 10);
+    if (!byDay[day]) byDay[day] = { total_tokens: 0, by_model: {} };
+    byDay[day].total_tokens += s.total_tokens;
+    for (const [model, tokens] of Object.entries(s.model_split || {})) {
+      byDay[day].by_model[model] = (byDay[day].by_model[model] || 0) + tokens;
+    }
+
+    // by_agent
+    for (const agent of (s.agents || [])) {
+      if (!byAgent[agent]) byAgent[agent] = { total_tokens: 0, session_count: 0, primary_model: null, model_tokens: {} };
+      byAgent[agent].session_count += 1;
+      // We don't have per-agent token splits inside sessions, use session total / agent count as rough proxy
+      const share = Math.round(s.total_tokens / Math.max(1, s.agents.length));
+      byAgent[agent].total_tokens += share;
+      for (const [model, tokens] of Object.entries(s.model_split || {})) {
+        byAgent[agent].model_tokens[model] = (byAgent[agent].model_tokens[model] || 0) + Math.round(tokens / Math.max(1, s.agents.length));
+      }
+    }
+  }
+
+  // Determine primary model per agent
+  for (const [agent, info] of Object.entries(byAgent)) {
+    let best = null, bestCount = 0;
+    for (const [model, count] of Object.entries(info.model_tokens || {})) {
+      if (count > bestCount) { best = model; bestCount = count; }
+    }
+    info.primary_model = best;
+  }
+
+  // For skills use the full DATA (filter not possible without per-message timestamps)
+  const skillSource = DATA.by_skill || {};
+
+  return { byModel, byAgent, bySkill: skillSource, byProject, byDay, totalTokens };
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ── Budget Gauges ────────────────────────────────────────────────────────────
+
+function renderGauges(filteredSessions, totalTokens) {
+  const section = document.getElementById('gaugesSection');
+
+  function gaugeColorClass(pct) {
+    if (pct < 60) return 'green';
+    if (pct < 80) return 'yellow';
+    return 'red';
+  }
+
+  function buildGauge(label, value, limit, sublabel) {
+    if (limit) {
+      const pct = Math.min(100, Math.round((value / limit) * 100));
+      const cls = gaugeColorClass(pct);
+      return `
+        <div class="gauge">
+          <div class="gauge-value">${pct}%</div>
+          <div class="gauge-label"><span>${label}</span><span>${fmtTokens(value)} / ${fmtTokens(limit)}</span></div>
+          <div class="gauge-bar"><div class="gauge-fill ${cls}" style="width:${pct}%"></div></div>
+        </div>`;
+    } else {
+      // No limits — show raw count
+      const fillPct = totalTokens > 0 ? Math.round((value / totalTokens) * 100) : 0;
+      return `
+        <div class="gauge">
+          <div class="gauge-value">${fmtTokens(value)}</div>
+          <div class="gauge-label"><span>${label}</span><span>${sublabel}</span></div>
+          <div class="gauge-bar"><div class="gauge-fill neutral" style="width:${Math.min(100,fillPct)}%"></div></div>
+        </div>`;
+    }
+  }
+
+  // Rolling 5-hour tokens
+  const now = new Date();
+  const cut5h  = new Date(now.getTime() - 5  * 60 * 60 * 1000);
+  const cut7d  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
+
+  let tokens5h = 0, tokens7d = 0, sonnetTokens7d = 0;
+  for (const s of DATA.sessions) {
+    const t = new Date(s.start_time);
+    const tok = s.total_tokens;
+    if (t >= cut5h) tokens5h += tok;
+    if (t >= cut7d) {
+      tokens7d += tok;
+      sonnetTokens7d += (s.model_split && s.model_split['sonnet']) || 0;
+    }
+  }
+
+  const lim5h  = LIMITS && LIMITS.limit_5h        ? LIMITS.limit_5h        : null;
+  const lim7d  = LIMITS && LIMITS.limit_7d        ? LIMITS.limit_7d        : null;
+  const limSon = LIMITS && LIMITS.limit_sonnet_7d ? LIMITS.limit_sonnet_7d : null;
+
+  section.innerHTML =
+    buildGauge('5-Hour Rolling',    tokens5h,       lim5h,  'tokens') +
+    buildGauge('7-Day Rolling',     tokens7d,       lim7d,  'tokens') +
+    buildGauge('Sonnet-Only 7-Day', sonnetTokens7d, limSon, 'sonnet tokens');
+}
+
+// ── Model Donut ──────────────────────────────────────────────────────────────
+
+function renderModelDonut(byModel, totalTokens) {
+  destroyChart('modelDonut');
+  const models  = Object.keys(byModel);
+  const values  = models.map(m => byModel[m].total_tokens);
+  const colors  = models.map(m => modelColor(m));
+  const labels  = models.map(m => m || 'unknown');
+
+  charts['modelDonut'] = new Chart(document.getElementById('modelDonut'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderWidth: 0,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pct = totalTokens > 0 ? Math.round((ctx.parsed / totalTokens) * 100) : 0;
+              return `${ctx.label}: ${fmtTokens(ctx.parsed)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── Daily Stacked Bar ────────────────────────────────────────────────────────
+
+function renderDailyStacked(byDay) {
+  destroyChart('dailyStacked');
+  const days = Object.keys(byDay).sort();
+  const allModels = new Set();
+  days.forEach(d => Object.keys(byDay[d].by_model).forEach(m => allModels.add(m)));
+
+  const orderedModels = ['opus', 'sonnet', 'haiku', ...([...allModels].filter(m => !['opus','sonnet','haiku'].includes(m)))];
+  const presentModels = orderedModels.filter(m => allModels.has(m));
+
+  const datasets = presentModels.map(model => ({
+    label: model || 'unknown',
+    data: days.map(d => byDay[d].by_model[model] || 0),
+    backgroundColor: modelColor(model)
+  }));
+
+  charts['dailyStacked'] = new Chart(document.getElementById('dailyStacked'), {
+    type: 'bar',
+    data: { labels: days, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, ticks: { callback: v => fmtTokens(v) }, grid: { color: GRID } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtTokens(ctx.parsed.y)}` } }
+      }
+    }
+  });
+}
+
+// ── Agent Bar ────────────────────────────────────────────────────────────────
+
+function renderAgentBar(byAgent) {
+  destroyChart('agentBar');
+  const agents = Object.entries(byAgent)
+    .sort((a, b) => b[1].total_tokens - a[1].total_tokens);
+
+  const labels = agents.map(([a]) => a || 'unknown');
+  const values = agents.map(([, info]) => info.total_tokens);
+  const colors = agents.map(([, info]) => modelColor(info.primary_model));
+
+  charts['agentBar'] = new Chart(document.getElementById('agentBar'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { callback: v => fmtTokens(v) }, grid: { color: GRID } },
+        y: { grid: { display: false } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtTokens(ctx.parsed.x) + ' tokens' } }
+      }
+    }
+  });
+}
+
+// ── Agent Table ──────────────────────────────────────────────────────────────
+
+function renderAgentTable(byAgent, totalTokens) {
+  const tbody = document.getElementById('agentTableBody');
+  const agents = Object.entries(byAgent)
+    .sort((a, b) => b[1].total_tokens - a[1].total_tokens);
+
+  tbody.innerHTML = agents.map(([agent, info]) => {
+    const pct = totalTokens > 0 ? Math.round((info.total_tokens / totalTokens) * 100) : 0;
+    const barW = Math.round(pct * 1.2); // max ~120px for 100%
+    const model = info.primary_model || 'unknown';
+    const badgeCls = modelBadgeClass(model);
+    const color = modelColor(model);
+    return `<tr>
+      <td>${agent || 'unknown'}</td>
+      <td><span class="badge ${badgeCls}">${model}</span></td>
+      <td>${fmtTokens(info.total_tokens)}</td>
+      <td><span class="pct-bar" style="width:${barW}px;background:${color}"></span>${pct}%</td>
+      <td>${info.session_count || 0}</td>
+    </tr>`;
+  }).join('');
+
+  if (!agents.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No data for this period</td></tr>';
+  }
+}
+
+// ── Skill Bar ────────────────────────────────────────────────────────────────
+
+function renderSkillBar(bySkill) {
+  destroyChart('skillBar');
+  const skills = Object.entries(bySkill)
+    .sort((a, b) => b[1].invocation_count - a[1].invocation_count);
+
+  const labels = skills.map(([s]) => s || 'unknown');
+  const values = skills.map(([, info]) => info.invocation_count);
+
+  charts['skillBar'] = new Chart(document.getElementById('skillBar'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Invocations',
+        data: values,
+        backgroundColor: '#d2a8ff',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: GRID } },
+        y: { grid: { display: false } }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+// ── Project Bar ──────────────────────────────────────────────────────────────
+
+function renderProjectBar(byProject) {
+  destroyChart('projectBar');
+  const projects = Object.entries(byProject)
+    .sort((a, b) => b[1].total_tokens - a[1].total_tokens);
+
+  const labels = projects.map(([p]) => p || 'unknown');
+  const values = projects.map(([, info]) => info.total_tokens);
+  const palette = ['#f78166','#ffa657','#d2a8ff','#79c0ff','#7ee787','#e3b341','#58a6ff','#8b5cf6'];
+  const colors  = projects.map((_, i) => palette[i % palette.length]);
+
+  charts['projectBar'] = new Chart(document.getElementById('projectBar'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Tokens',
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { callback: v => fmtTokens(v) }, grid: { color: GRID } },
+        y: { grid: { display: false } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtTokens(ctx.parsed.x) + ' tokens' } }
+      }
+    }
+  });
+}
+
+// ── Session Rows ─────────────────────────────────────────────────────────────
+
+function renderSessions(sessions) {
+  const container = document.getElementById('sessionRows');
+
+  if (!sessions.length) {
+    container.innerHTML = '<div class="empty-state">No sessions in this time window.</div>';
+    return;
+  }
+
+  container.innerHTML = sessions.map(s => {
+    const dt = new Date(s.start_time);
+    const timeStr = dt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+    const agentTags = (s.agents || [])
+      .map(a => `<span class="agent-tag">${a}</span>`)
+      .join('');
+
+    const split = s.model_split || {};
+    const splitTotal = Object.values(split).reduce((a, b) => a + b, 0) || 1;
+    const miniBarParts = Object.entries(split)
+      .map(([model, tokens]) => {
+        const pct = Math.round((tokens / splitTotal) * 100);
+        const cls = model.toLowerCase().includes('opus') ? 'opus'
+                  : model.toLowerCase().includes('sonnet') ? 'sonnet'
+                  : model.toLowerCase().includes('haiku') ? 'haiku'
+                  : 'unknown';
+        return `<div class="${cls}" style="width:${pct}%"></div>`;
+      }).join('');
+
+    return `<div class="session-row clickable">
+      <div class="session-time">${timeStr}</div>
+      <div class="project-name">${s.project || '—'}</div>
+      <div class="session-agents">${agentTags}</div>
+      <div>${fmtTokens(s.total_tokens)}</div>
+      <div><div class="mini-bar">${miniBarParts}</div></div>
+      <div class="session-time">${fmtDuration(s.duration_minutes)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Main render / filter ─────────────────────────────────────────────────────
+
+function applyFilter() {
+  const period = document.getElementById('periodSelect').value;
+  const sessions = filterSessions(period);
+  const { byModel, byAgent, bySkill, byProject, byDay, totalTokens } = reAggregate(sessions);
+
+  renderGauges(sessions, totalTokens);
+  renderModelDonut(byModel, totalTokens);
+  renderDailyStacked(byDay);
+  renderAgentBar(byAgent);
+  renderAgentTable(byAgent, totalTokens);
+  renderSkillBar(bySkill);
+  renderProjectBar(byProject);
+  renderSessions(sessions);
+}
+
+// Initial render
+applyFilter();
+</script>
+</body>
+</html>

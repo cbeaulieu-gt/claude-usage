@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-usage"
+version = "0.1.0"
+description = "Parse Claude Code session data and generate an interactive HTML usage dashboard"
+requires-python = ">=3.10"
+dependencies = [
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["claude_usage*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
