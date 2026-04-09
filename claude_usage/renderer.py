@@ -45,6 +45,7 @@ def render(
         "by_model": result.by_model,
         "by_agent": result.by_agent,
         "by_skill": result.by_skill,
+        "by_skill_adoption": result.by_skill_adoption,
         "by_project": result.by_project,
         "by_day": result.by_day,
         "sessions": result.sessions,

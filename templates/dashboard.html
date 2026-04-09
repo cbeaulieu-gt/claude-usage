@@ -146,6 +146,24 @@
   </div>
 </div>
 
+    <!-- Skill Adoption -->
+    <div id="skillAdoptionSection" class="card" style="display:none">
+      <h2>Skill Adoption (Pass-Through Tracking)</h2>
+      <div style="height:300px"><canvas id="skillAdoption"></canvas></div>
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Passed</th>
+            <th>Invoked</th>
+            <th>Rate</th>
+            <th>Per Agent</th>
+          </tr>
+        </thead>
+        <tbody id="skillAdoptionTableBody"></tbody>
+      </table>
+    </div>
+
 <!-- Session drill-down -->
 <div class="session-panel">
   <h3>&#x1f50d; Session Drill-Down</h3>
@@ -520,6 +538,84 @@ function renderSkillBar(bySkill) {
   });
 }
 
+// ── Skill Adoption ───────────────────────────────────────────────────────────
+
+function renderSkillAdoption(bySkillAdoption) {
+  const container = document.getElementById('skillAdoptionSection');
+  if (!bySkillAdoption || Object.keys(bySkillAdoption).length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = '';
+
+  destroyChart('skillAdoption');
+  const skills = Object.entries(bySkillAdoption)
+    .sort((a, b) => b[1].times_passed - a[1].times_passed);
+
+  const labels = skills.map(([s]) => s);
+  const passedData = skills.map(([, info]) => info.times_passed);
+  const invokedData = skills.map(([, info]) => info.times_invoked);
+
+  charts['skillAdoption'] = new Chart(document.getElementById('skillAdoption'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Passed',
+          data: passedData,
+          backgroundColor: '#8b949e',
+          borderRadius: 4
+        },
+        {
+          label: 'Invoked',
+          data: invokedData,
+          backgroundColor: '#2ea043',
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: GRID }, stacked: false },
+        y: { grid: { display: false } }
+      },
+      plugins: {
+        legend: { labels: { color: TEXT } },
+        tooltip: {
+          callbacks: {
+            afterBody: function(context) {
+              const idx = context[0].dataIndex;
+              const skill = labels[idx];
+              const info = bySkillAdoption[skill];
+              return 'Adoption: ' + (info.adoption_rate * 100).toFixed(0) + '%';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Render detail table
+  const tbody = document.getElementById('skillAdoptionTableBody');
+  tbody.innerHTML = skills.map(([skill, info]) => {
+    const rate = (info.adoption_rate * 100).toFixed(0);
+    const agents = Object.entries(info.by_target_agent || {})
+      .map(([agent, counts]) => agent + ': ' + counts.invoked + '/' + counts.passed)
+      .join(', ');
+    return '<tr>' +
+      '<td>' + skill + '</td>' +
+      '<td>' + info.times_passed + '</td>' +
+      '<td>' + info.times_invoked + '</td>' +
+      '<td>' + rate + '%</td>' +
+      '<td style="font-size:0.85em;color:#8b949e">' + agents + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
 // ── Project Bar ──────────────────────────────────────────────────────────────
 
 function renderProjectBar(byProject) {
@@ -613,6 +709,7 @@ function applyFilter() {
   renderAgentBar(byAgent);
   renderAgentTable(byAgent, totalTokens);
   renderSkillBar(bySkill);
+  renderSkillAdoption(DATA.by_skill_adoption);
   renderProjectBar(byProject);
   renderSessions(sessions);
 }
