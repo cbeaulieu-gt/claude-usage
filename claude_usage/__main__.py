@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -82,12 +83,19 @@ def main() -> None:
         "--limit-sonnet-7d", type=int, default=None,
         help="Token budget for Sonnet-only 7-day window (for gauge percentage).",
     )
+    parser.add_argument(
+        "--format", dest="output_format", choices=["html", "json"], default="html",
+        help="Output format: 'html' (default) opens a dashboard; 'json' writes structured data to stdout.",
+    )
 
     args = parser.parse_args()
 
-    print(f"Scanning sessions in {args.data_dir}...")
+    # In json mode, status messages go to stderr so stdout carries only the JSON payload.
+    status_file = sys.stderr if args.output_format == "json" else sys.stdout
+
+    print(f"Scanning sessions in {args.data_dir}...", file=status_file)
     sessions = parse_sessions(args.data_dir)
-    print(f"Found {len(sessions)} sessions.")
+    print(f"Found {len(sessions)} sessions.", file=status_file)
 
     result = aggregate(
         sessions,
@@ -95,7 +103,10 @@ def main() -> None:
         to_date=args.to_date,
         window_hours=args.window,
     )
-    print(f"Aggregated: {result.total_tokens:,} tokens across {result.total_sessions} sessions.")
+    print(
+        f"Aggregated: {result.total_tokens:,} tokens across {result.total_sessions} sessions.",
+        file=status_file,
+    )
 
     # Skill adoption tracking (from PreToolUse hook log)
     passed_events, invoked_events = parse_skill_tracking(args.data_dir)
@@ -115,6 +126,23 @@ def main() -> None:
             "limit_7d": args.limit_7d,
             "limit_sonnet_7d": args.limit_sonnet_7d,
         }
+
+    if args.output_format == "json":
+        payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "total_tokens": result.total_tokens,
+            "total_messages": result.total_messages,
+            "total_sessions": result.total_sessions,
+            "by_model": result.by_model,
+            "by_agent": result.by_agent,
+            "by_skill": result.by_skill,
+            "by_project": result.by_project,
+            "by_day": result.by_day,
+            "sessions": result.sessions,
+            "limits": limits,
+        }
+        print(json.dumps(payload, indent=2))
+        return
 
     output = render(
         result,

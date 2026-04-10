@@ -75,3 +75,161 @@ class TestSkillAdoptionE2E:
         html = output.read_text(encoding="utf-8")
         assert "Skill Adoption" in html
         assert "python" in html
+
+
+class TestSubagentModelAttribution:
+    """Regression test for issue #8: subagents misattributed to parent model.
+
+    A subagent (e.g. 'debugger') running on Sonnet inside an Opus parent
+    session must be labelled Sonnet in the dashboard, not Opus.  The bug was
+    that the JavaScript reAggregate() function derived primary_model from
+    session-level token splits divided equally across all agents — which
+    caused the Sonnet subagent to accumulate more Opus tokens than Sonnet
+    tokens and appear as Opus.  The fix uses DATA.by_agent[agent].primary_model
+    (computed server-side from actual per-message model fields) as the
+    authoritative source and embeds it in the rendered HTML.
+    """
+
+    def _build_session_dir(self, tmp_path: Path) -> Path:
+        """Create a fixture: general-purpose (Opus) session with a debugger (Sonnet) subagent."""
+        project_dir = tmp_path / "projects" / "C--Users-chris--test"
+        project_dir.mkdir(parents=True)
+        session_id = "sess-opus-parent-sonnet-sub"
+
+        # Parent session: general-purpose runs on Opus
+        parent_lines = [
+            {
+                "type": "agent-setting",
+                "agentSetting": "general-purpose",
+                "sessionId": session_id,
+            },
+            {
+                "parentUuid": None,
+                "type": "user",
+                "message": {"role": "user", "content": "Debug the auth module"},
+                "uuid": "p-msg-1",
+                "timestamp": "2026-04-10T10:00:00.000Z",
+                "sessionId": session_id,
+            },
+            # Opus parent message — large token count to dominate session totals
+            {
+                "parentUuid": "p-msg-1",
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-6",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Routing to debugger..."}],
+                    "usage": {
+                        "input_tokens": 5000,
+                        "output_tokens": 2000,
+                        "cache_read_input_tokens": 10000,
+                        "cache_creation_input_tokens": 8000,
+                    },
+                },
+                "uuid": "p-msg-2",
+                "timestamp": "2026-04-10T10:00:05.000Z",
+                "sessionId": session_id,
+            },
+        ]
+
+        (project_dir / f"{session_id}.jsonl").write_text(
+            "\n".join(json.dumps(l) for l in parent_lines), encoding="utf-8"
+        )
+
+        # Subagent directory
+        subagent_dir = project_dir / session_id / "subagents"
+        subagent_dir.mkdir(parents=True)
+
+        # debugger subagent metadata
+        (subagent_dir / "agent-debugger1.meta.json").write_text(
+            json.dumps({"agentType": "debugger", "description": "Debug the auth module"}),
+            encoding="utf-8",
+        )
+
+        # debugger subagent JSONL: runs on Sonnet (small token count relative to Opus parent)
+        sub_lines = [
+            {
+                "parentUuid": None,
+                "type": "user",
+                "message": {"role": "user", "content": "Debug the auth module"},
+                "uuid": "s-msg-1",
+                "timestamp": "2026-04-10T10:00:10.000Z",
+                "sessionId": session_id,
+            },
+            {
+                "parentUuid": "s-msg-1",
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Investigating..."}],
+                    "usage": {
+                        "input_tokens": 200,
+                        "output_tokens": 100,
+                        "cache_read_input_tokens": 50,
+                        "cache_creation_input_tokens": 0,
+                    },
+                },
+                "uuid": "s-msg-2",
+                "timestamp": "2026-04-10T10:00:30.000Z",
+                "sessionId": session_id,
+            },
+        ]
+
+        (subagent_dir / "agent-debugger1.jsonl").write_text(
+            "\n".join(json.dumps(l) for l in sub_lines), encoding="utf-8"
+        )
+
+        return tmp_path
+
+    def test_subagent_primary_model_uses_actual_message_model(self, tmp_path: Path):
+        """Python aggregator must attribute debugger to sonnet, not opus.
+
+        The Opus parent has ~25000 tokens; debugger has only ~350.  The old JS
+        heuristic would split session totals equally across agents (general-purpose
+        and debugger each get half of 25350 tokens, of which most are opus) and
+        incorrectly label debugger as opus.  The Python aggregator reads the
+        model field per message and must produce primary_model='sonnet' for
+        debugger regardless of token volumes.
+        """
+        session_dir = self._build_session_dir(tmp_path)
+        sessions = parse_sessions(session_dir)
+        result = aggregate(sessions)
+
+        assert "debugger" in result.by_agent, "debugger agent should be present"
+        assert result.by_agent["debugger"]["primary_model"] == "sonnet", (
+            "debugger ran on claude-sonnet-4-6; primary_model must be 'sonnet', "
+            f"got {result.by_agent['debugger']['primary_model']!r}"
+        )
+        assert result.by_agent["general-purpose"]["primary_model"] == "opus", (
+            "general-purpose ran on claude-opus-4-6; primary_model must be 'opus'"
+        )
+
+    def test_rendered_html_embeds_correct_primary_model_for_subagent(self, tmp_path: Path):
+        """Rendered HTML must embed primary_model='sonnet' for debugger in DATA.by_agent.
+
+        The dashboard JavaScript reads DATA.by_agent[agent].primary_model to
+        colour agent bars.  This test verifies the server-computed value is
+        correctly embedded so the JS fix has correct data to work with.
+        """
+        session_dir = self._build_session_dir(tmp_path)
+        sessions = parse_sessions(session_dir)
+        result = aggregate(sessions)
+
+        output_path = tmp_path / "test-dashboard.html"
+        render(result, output_path=output_path, open_browser=False)
+        html = output_path.read_text(encoding="utf-8")
+
+        # Extract the DATA JSON blob embedded in the HTML
+        marker = "const DATA = "
+        start = html.index(marker) + len(marker)
+        # Find the matching closing brace by scanning for the semicolon after the JSON object
+        end = html.index(";\n", start)
+        data = json.loads(html[start:end])
+
+        assert "debugger" in data["by_agent"], "by_agent must contain debugger"
+        actual = data["by_agent"]["debugger"]["primary_model"]
+        assert actual == "sonnet", (
+            f"DATA.by_agent.debugger.primary_model must be 'sonnet' in rendered HTML, got {actual!r}. "
+            "The JS fix uses this value as authoritative; if it is wrong here the dashboard will still misattribute."
+        )

@@ -288,13 +288,28 @@ function reAggregate(sessions) {
     }
   }
 
-  // Determine primary model per agent
+  // Determine primary model per agent.
+  // Use DATA.by_agent[agent].primary_model as the authoritative source — it is
+  // computed server-side from actual per-message model fields and correctly
+  // attributes each subagent to the model it actually ran on.  The token-split
+  // heuristic below (dividing session totals equally across all agents in a
+  // session) is unreliable: a Sonnet subagent inside an Opus parent session
+  // ends up accumulating more Opus tokens than Sonnet tokens, which makes it
+  // appear to be an Opus agent even though every one of its messages used Sonnet.
   for (const [agent, info] of Object.entries(byAgent)) {
-    let best = null, bestCount = 0;
-    for (const [model, count] of Object.entries(info.model_tokens || {})) {
-      if (count > bestCount) { best = model; bestCount = count; }
+    const authoritative = DATA.by_agent && DATA.by_agent[agent] && DATA.by_agent[agent].primary_model;
+    if (authoritative) {
+      info.primary_model = authoritative;
+    } else {
+      // Fallback: best-effort heuristic from session-level token splits.
+      // Only used for agents not present in the server-computed DATA.by_agent
+      // (e.g. agents that only appear in filtered-out sessions).
+      let best = null, bestCount = 0;
+      for (const [model, count] of Object.entries(info.model_tokens || {})) {
+        if (count > bestCount) { best = model; bestCount = count; }
+      }
+      info.primary_model = best;
     }
-    info.primary_model = best;
   }
 
   // For skills use the full DATA (filter not possible without per-message timestamps)
