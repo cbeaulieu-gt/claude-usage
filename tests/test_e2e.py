@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from claude_usage.aggregator import aggregate
+from claude_usage.aggregator import AggregateResult, aggregate
 from claude_usage.parser import parse_sessions
 from claude_usage.renderer import render
 
@@ -232,4 +232,93 @@ class TestSubagentModelAttribution:
         assert actual == "sonnet", (
             f"DATA.by_agent.debugger.primary_model must be 'sonnet' in rendered HTML, got {actual!r}. "
             "The JS fix uses this value as authoritative; if it is wrong here the dashboard will still misattribute."
+        )
+
+
+class TestChartLabelSkip:
+    """Regression test for issue #7: category-axis labels skipped on Tokens by Agent
+    and Skill Invocations charts.
+
+    Chart.js defaults autoSkip=true on tick axes, which causes every other label to
+    vanish when the chart height is small relative to the number of categories.  The
+    fix sets ticks: { autoSkip: false } on the y-axis of every horizontal bar chart so
+    that all labels are always rendered.  This test verifies the rendered HTML contains
+    that config by inspecting the template source.
+    """
+
+    def _build_large_result(self, n: int = 20) -> AggregateResult:
+        """Build an AggregateResult with *n* agents and *n* skills — enough to
+        trigger label-skipping at the default 260 px chart height."""
+        result = AggregateResult()
+        result.total_tokens = n * 1000
+        result.total_sessions = n
+
+        for i in range(n):
+            agent = f"agent-{i:02d}"
+            result.by_agent[agent] = {
+                "total_tokens": (n - i) * 1000,
+                "primary_model": "sonnet",
+                "session_count": 1,
+            }
+            skill = f"skill-{i:02d}"
+            result.by_skill[skill] = {"invocation_count": n - i}
+            project = f"project-{i:02d}"
+            result.by_project[project] = {
+                "total_tokens": (n - i) * 500,
+                "primary_model": "sonnet",
+            }
+
+        return result
+
+    def test_agent_bar_chart_has_auto_skip_false(self, tmp_path: Path) -> None:
+        """Rendered dashboard must contain autoSkip: false on the agentBar y-axis.
+
+        With 20 agents and a fixed-height container, Chart.js would skip every
+        other label unless autoSkip is explicitly disabled.
+        """
+        result = self._build_large_result(20)
+        output = tmp_path / "dashboard.html"
+        render(result, output_path=output, open_browser=False)
+
+        html = output.read_text(encoding="utf-8")
+
+        # The template contains the literal JS source for both charts.
+        # We verify the autoSkip: false config is present in the output.
+        assert "autoSkip: false" in html, (
+            "Rendered HTML must contain 'autoSkip: false' — Chart.js will skip "
+            "category-axis labels at the default chart height without it."
+        )
+
+    def test_skill_bar_chart_has_auto_skip_false(self, tmp_path: Path) -> None:
+        """renderSkillBar must also have autoSkip: false on its y-axis."""
+        result = self._build_large_result(20)
+        output = tmp_path / "dashboard.html"
+        render(result, output_path=output, open_browser=False)
+
+        html = output.read_text(encoding="utf-8")
+
+        # Count occurrences — there should be one per horizontal bar chart
+        # (agentBar, skillBar, projectBar, skillAdoption = 4 charts).
+        count = html.count("autoSkip: false")
+        assert count >= 2, (
+            f"Expected at least 2 occurrences of 'autoSkip: false' (agentBar + skillBar), "
+            f"found {count}. Both charts need the config to fix label skipping."
+        )
+
+    def test_dynamic_height_set_for_many_categories(self, tmp_path: Path) -> None:
+        """Rendered HTML must set container height dynamically based on item count.
+
+        Without dynamic height, disabling autoSkip alone causes labels to overlap.
+        The template sets canvas.parentElement.style.height proportionally.
+        """
+        result = self._build_large_result(20)
+        output = tmp_path / "dashboard.html"
+        render(result, output_path=output, open_browser=False)
+
+        html = output.read_text(encoding="utf-8")
+
+        assert "parentElement.style.height" in html, (
+            "Rendered HTML must contain parentElement.style.height — "
+            "dynamic container sizing is required to prevent label overlap "
+            "after disabling autoSkip."
         )
