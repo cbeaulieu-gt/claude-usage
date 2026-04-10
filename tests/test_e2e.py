@@ -50,6 +50,33 @@ class TestEndToEnd:
         assert rendered.exists()
 
 
+class TestSkillAdoptionE2E:
+    def test_adoption_data_in_rendered_html(self, sample_session_dir: Path, tmp_path: Path):
+        """Verify skill adoption data appears in the rendered dashboard."""
+        from claude_usage.aggregator import compute_skill_adoption
+        from claude_usage.skill_tracking import parse_skill_tracking
+
+        tracking_file = sample_session_dir / "skill-tracking.jsonl"
+        lines = [
+            json.dumps({"event": "skill_passed", "skill": "python", "target_agent": "code-writer", "timestamp": "2026-04-09T21:00:00Z", "session_id": "test-1"}),
+            json.dumps({"event": "skill_invoked", "skill": "python", "timestamp": "2026-04-09T21:01:00Z", "session_id": "test-1"}),
+        ]
+        tracking_file.write_text("\n".join(lines) + "\n")
+
+        sessions = parse_sessions(sample_session_dir)
+        result = aggregate(sessions)
+
+        passed, invoked = parse_skill_tracking(sample_session_dir)
+        result.by_skill_adoption = compute_skill_adoption(passed, invoked)
+
+        output = tmp_path / "test-dashboard.html"
+        render(result, output_path=output, open_browser=False)
+
+        html = output.read_text(encoding="utf-8")
+        assert "Skill Adoption" in html
+        assert "python" in html
+
+
 class TestSubagentModelAttribution:
     """Regression test for issue #8: subagents misattributed to parent model.
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from claude_usage.aggregator import aggregate
 from claude_usage.parser import parse_sessions
 from claude_usage.renderer import render
+from claude_usage.skill_tracking import parse_skill_tracking
 
 
 def _parse_window(window_str: str) -> float:
@@ -106,6 +107,17 @@ def main() -> None:
         f"Aggregated: {result.total_tokens:,} tokens across {result.total_sessions} sessions.",
         file=status_file,
     )
+
+    # Skill adoption tracking (from PreToolUse hook log)
+    passed_events, invoked_events = parse_skill_tracking(args.data_dir)
+    if passed_events or invoked_events:
+        from claude_usage.aggregator import compute_skill_adoption
+        result.by_skill_adoption = compute_skill_adoption(
+            passed_events,
+            invoked_events,
+            from_date=args.from_date,
+            to_date=args.to_date,
+        )
 
     limits = None
     if any([args.limit_5h, args.limit_7d, args.limit_sonnet_7d]):

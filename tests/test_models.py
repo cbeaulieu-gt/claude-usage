@@ -1,7 +1,7 @@
 # tests/test_models.py
 from datetime import datetime, timezone
 
-from claude_usage.models import MessageRecord, SessionRecord
+from claude_usage.models import MessageRecord, SessionRecord, SkillPassedEvent, SkillInvokedEvent
 
 
 class TestMessageRecord:
@@ -150,3 +150,48 @@ class TestSessionRecord:
             subagent_types=[],
         )
         assert session.duration_minutes == 0
+
+
+class TestSkillPassedEvent:
+    def test_creation(self):
+        evt = SkillPassedEvent(
+            skill="python",
+            target_agent="code-writer",
+            timestamp=datetime(2026, 4, 9, tzinfo=timezone.utc),
+            session_id="abc-123",
+        )
+        assert evt.skill == "python"
+        assert evt.target_agent == "code-writer"
+        assert evt.session_id == "abc-123"
+
+    def test_frozen(self):
+        import pytest
+        evt = SkillPassedEvent(
+            skill="python",
+            target_agent="code-writer",
+            timestamp=datetime(2026, 4, 9, tzinfo=timezone.utc),
+            session_id="abc-123",
+        )
+        with pytest.raises(AttributeError):
+            evt.skill = "other"
+
+
+class TestSkillInvokedEvent:
+    def test_creation(self):
+        evt = SkillInvokedEvent(
+            skill="python",
+            timestamp=datetime(2026, 4, 9, tzinfo=timezone.utc),
+            session_id="abc-123",
+        )
+        assert evt.skill == "python"
+        assert evt.session_id == "abc-123"
+
+    def test_frozen(self):
+        import pytest
+        evt = SkillInvokedEvent(
+            skill="python",
+            timestamp=datetime(2026, 4, 9, tzinfo=timezone.utc),
+            session_id="abc-123",
+        )
+        with pytest.raises(AttributeError):
+            evt.skill = "other"

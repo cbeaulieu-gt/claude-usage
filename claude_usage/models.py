@@ -60,3 +60,22 @@ class SessionRecord:
         timestamps = [m.timestamp for m in self.messages]
         delta = max(timestamps) - min(timestamps)
         return int(delta.total_seconds() / 60)
+
+
+@dataclass(frozen=True, slots=True)
+class SkillPassedEvent:
+    """A skill reference found in an Agent dispatch prompt."""
+
+    skill: str
+    target_agent: str
+    timestamp: datetime
+    session_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SkillInvokedEvent:
+    """An actual Skill tool invocation."""
+
+    skill: str
+    timestamp: datetime
+    session_id: str

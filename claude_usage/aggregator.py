@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from claude_usage.models import MessageRecord, SessionRecord
+from claude_usage.models import MessageRecord, SessionRecord, SkillPassedEvent, SkillInvokedEvent
 
 
 @dataclass
@@ -23,6 +23,7 @@ class AggregateResult:
     by_project: dict[str, dict] = field(default_factory=dict)
     by_day: dict[str, dict] = field(default_factory=dict)
     sessions: list[dict] = field(default_factory=list)
+    by_skill_adoption: dict[str, dict] = field(default_factory=dict)
 
 
 def _add_tokens(bucket: dict, msg: MessageRecord) -> None:
@@ -150,5 +151,55 @@ def aggregate(
         result.by_day[day]["by_model"][model] += msg.total_tokens
 
     result.sessions.sort(key=lambda s: s["start_time"], reverse=True)
+
+    return result
+
+
+def compute_skill_adoption(
+    passed_events: list[SkillPassedEvent],
+    invoked_events: list[SkillInvokedEvent],
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+) -> dict[str, dict]:
+    """Correlate skill_passed and skill_invoked events into adoption metrics.
+
+    Only skills with at least one skill_passed event appear in the result.
+    Direct invocations (no matching pass) are excluded.
+    """
+    if from_date:
+        passed_events = [e for e in passed_events if e.timestamp >= from_date]
+        invoked_events = [e for e in invoked_events if e.timestamp >= from_date]
+    if to_date:
+        passed_events = [e for e in passed_events if e.timestamp < to_date]
+        invoked_events = [e for e in invoked_events if e.timestamp < to_date]
+
+    invoked_sessions: dict[str, set[str]] = defaultdict(set)
+    for evt in invoked_events:
+        invoked_sessions[evt.skill].add(evt.session_id)
+
+    passed_by_skill: dict[str, list[SkillPassedEvent]] = defaultdict(list)
+    for evt in passed_events:
+        passed_by_skill[evt.skill].append(evt)
+
+    result: dict[str, dict] = {}
+    for skill, pass_list in passed_by_skill.items():
+        times_invoked = sum(
+            1 for evt in pass_list
+            if evt.session_id in invoked_sessions.get(skill, set())
+        )
+        times_passed = len(pass_list)
+
+        by_agent: dict[str, dict[str, int]] = defaultdict(lambda: {"passed": 0, "invoked": 0})
+        for evt in pass_list:
+            by_agent[evt.target_agent]["passed"] += 1
+            if evt.session_id in invoked_sessions.get(skill, set()):
+                by_agent[evt.target_agent]["invoked"] += 1
+
+        result[skill] = {
+            "times_passed": times_passed,
+            "times_invoked": times_invoked,
+            "adoption_rate": round(times_invoked / times_passed, 3) if times_passed > 0 else 0.0,
+            "by_target_agent": dict(by_agent),
+        }
 
     return result
