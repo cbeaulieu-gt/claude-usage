@@ -103,27 +103,97 @@ def build_skill_allowlist(claude_dir: Path) -> set[str]:
 
 
 # Patterns for extracting skill references from Agent dispatch prompts
-_BACKTICK_PATTERN = re.compile(r"`([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)`")
+_BACKTICK_PATTERN = re.compile(
+    r"`([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)`"
+)
 _PHRASE_PATTERNS = [
-    re.compile(r"[Uu]se (?:the )?[\"']?([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)[\"']? skill", re.IGNORECASE),
-    re.compile(r"[Ii]nvoke (?:the )?[\"']?([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)[\"']? skill", re.IGNORECASE),
-    re.compile(r"[Uu]se skill:?\s*[\"']?([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)[\"']?", re.IGNORECASE),
+    re.compile(
+        r"[Uu]se (?:the )?[\"']?"
+        r"([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)"
+        r"[\"']? skill",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"[Ii]nvoke (?:the )?[\"']?"
+        r"([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)"
+        r"[\"']? skill",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"[Uu]se skill:?\s*[\"']?"
+        r"([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)"
+        r"[\"']?",
+        re.IGNORECASE,
+    ),
 ]
+
+# Characters to search on each side of a backtick match when checking
+# for nearby "skill" context.
+_SKILL_PROXIMITY_CHARS = 60
+
+
+def _has_nearby_skill_word(prompt: str, match_start: int, match_end: int) -> bool:
+    """Return True if the word 'skill' appears within proximity of a match.
+
+    Args:
+        prompt: The full prompt text being scanned.
+        match_start: Start index of the backtick match in the prompt.
+        match_end: End index of the backtick match in the prompt.
+
+    Returns:
+        True if the word ``skill`` or ``skills`` (case-insensitive)
+        appears within ``_SKILL_PROXIMITY_CHARS`` characters before or
+        after the match boundaries, False otherwise.
+    """
+    window_start = max(0, match_start - _SKILL_PROXIMITY_CHARS)
+    window_end = min(len(prompt), match_end + _SKILL_PROXIMITY_CHARS)
+    window = prompt[window_start:window_end]
+    return bool(re.search(r"\bskills?\b", window, re.IGNORECASE))
 
 
 def extract_skills_from_prompt(prompt: str, allowlist: set[str]) -> list[str]:
     """Extract skill names from an Agent dispatch prompt.
 
-    Uses backtick-quoted names and phrase patterns, then validates
-    against the allowlist to reduce false positives.
+    Uses two detection strategies and merges results before filtering
+    against the allowlist:
+
+    1. **Backtick matches** — any backtick-quoted token.  Namespaced
+       names (containing ``:``) are always accepted.  Single-segment
+       names are only accepted when the word *skill* (or *skills*)
+       appears within ``_SKILL_PROXIMITY_CHARS`` characters of the
+       match, preventing incidental mentions like a bare ``git`` in
+       command examples from inflating metrics.
+
+    2. **Phrase pattern matches** — patterns like *"Use the python
+       skill"* or *"Invoke the powershell skill"*.  These already
+       require the word *skill* in their regex, so they are accepted
+       unconditionally (no proximity check needed).
+
+    Args:
+        prompt: The Agent dispatch prompt to scan.
+        allowlist: Set of known installed skill names to validate
+            candidates against.
+
+    Returns:
+        Sorted list of skill names that appear in the prompt and are
+        present in the allowlist.
     """
-    candidates: set[str] = set()
+    backtick_candidates: set[str] = set()
 
     for match in _BACKTICK_PATTERN.finditer(prompt):
-        candidates.add(match.group(1))
+        name = match.group(1)
+        if ":" in name:
+            # Namespaced skills (e.g. superpowers:brainstorming) are
+            # unambiguous — accept without proximity check.
+            backtick_candidates.add(name)
+        elif _has_nearby_skill_word(prompt, match.start(), match.end()):
+            # Single-segment name confirmed by nearby "skill" keyword.
+            backtick_candidates.add(name)
 
+    phrase_candidates: set[str] = set()
     for pattern in _PHRASE_PATTERNS:
         for match in pattern.finditer(prompt):
-            candidates.add(match.group(1))
+            phrase_candidates.add(match.group(1))
 
+    candidates = backtick_candidates | phrase_candidates
     return sorted(c for c in candidates if c in allowlist)
