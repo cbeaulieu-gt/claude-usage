@@ -79,7 +79,8 @@ class TestParseSkillTracking:
 class TestExtractSkillsFromPrompt:
     def setup_method(self):
         self.allowlist = {
-            "python", "powershell", "superpowers:test-driven-development",
+            "python", "powershell", "git",
+            "superpowers:test-driven-development",
             "superpowers:brainstorming", "commit-commands:commit",
         }
 
@@ -104,7 +105,10 @@ class TestExtractSkillsFromPrompt:
         assert result == ["powershell"]
 
     def test_multiple_skills_in_prompt(self):
-        prompt = "Use the `python` skill and invoke `superpowers:brainstorming` first."
+        prompt = (
+            "Use the `python` skill and invoke "
+            "`superpowers:brainstorming` first."
+        )
         result = extract_skills_from_prompt(prompt, self.allowlist)
         assert result == ["python", "superpowers:brainstorming"]
 
@@ -120,6 +124,61 @@ class TestExtractSkillsFromPrompt:
 
     def test_deduplicates(self):
         prompt = "Use the `python` skill. Also invoke the python skill."
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == ["python"]
+
+    # ------------------------------------------------------------------
+    # False-positive filtering tests
+    # ------------------------------------------------------------------
+
+    def test_backtick_without_skill_context_rejected(self):
+        """Backtick mention of a skill name with no nearby 'skill' word
+        should NOT be counted as a skill pass."""
+        prompt = "Run `python` -m pytest"
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == []
+
+    def test_backtick_with_nearby_skill_word_accepted(self):
+        """Backtick mention with 'skill' in close proximity should be
+        detected via both the backtick path and the phrase pattern."""
+        prompt = "Use the `python` skill for style"
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == ["python"]
+
+    def test_namespaced_backtick_always_accepted(self):
+        """Namespaced skills in backticks need no 'skill' word nearby —
+        the colon makes them unambiguous."""
+        prompt = (
+            "Use `superpowers:test-driven-development` before coding"
+        )
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == ["superpowers:test-driven-development"]
+
+    def test_git_backtick_in_command_context_rejected(self):
+        """'git' in a command context (no nearby 'skill') should NOT
+        be detected."""
+        prompt = "Run `git diff` to check changes"
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == []
+
+    def test_powershell_incidental_mention_rejected(self):
+        """An incidental backtick mention of 'powershell' without a
+        nearby 'skill' keyword should be filtered out."""
+        prompt = "Use Bash not `powershell` for this agent"
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == []
+
+    def test_phrase_pattern_still_works_without_backticks(self):
+        """Phrase patterns ('Use the X skill') must still work even
+        when there are no backticks around the skill name."""
+        prompt = "Use the python skill for this"
+        result = extract_skills_from_prompt(prompt, self.allowlist)
+        assert result == ["python"]
+
+    def test_mixed_real_and_incidental(self):
+        """A prompt that genuinely passes 'python' via phrase pattern
+        AND mentions 'git' incidentally should match only 'python'."""
+        prompt = "Use the `python` skill. Run `git diff` first."
         result = extract_skills_from_prompt(prompt, self.allowlist)
         assert result == ["python"]
 
