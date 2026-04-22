@@ -46,7 +46,7 @@ claude-usage dashboard [--data-dir PATH] [--from DATE] [--to DATE] [--window WIN
                        [--limit-5h N] [--limit-7d N] [--limit-sonnet-7d N]
                        [--format {html,json}]
 
-claude-usage session-summary --path PATH [--format {json,text}]
+claude-usage session-summary --path PATH [--format {json,text}] [--max-actions N]
 ```
 
 ### Grammar rules
@@ -55,6 +55,7 @@ claude-usage session-summary --path PATH [--format {json,text}]
 - **Old flag-only form removed.** `claude-usage --format json` no longer works; callers migrate to `claude-usage dashboard --format json`.
 - **Dashboard flags unchanged** in name, semantics, and defaults — only their location moves (now under `dashboard` subparser).
 - **`--format` choices differ by subcommand**: `dashboard` is `{html, json}`; `session-summary` is `{json, text}`. `text` is a human-readable debug view, not consumed by `/whats-next`.
+- **`--max-actions N`**: `session-summary` only. Soft cap on the number of emitted actions. Default `50`. When the natural-order action list exceeds `N`, the first `N-1` are kept and a final sentinel string — `"… (<K> additional actions omitted)"` where `K` is the number dropped — is appended as the last element. Set `N=0` to disable the cap entirely (emit all actions).
 
 ### Cross-repo migration work (post-merge)
 
@@ -131,8 +132,8 @@ claude_usage/
 |---|---|---|
 | `project` | `string` | Always non-empty. Fallback to `"unknown"` if undetectable. |
 | `intent` | `string` | Always non-empty. Fallback to `"Ran /<command>"` for pure slash-command sessions. |
-| `actions` | `array[string]` | Always present. May be an empty array if the session contained no state-changing tool uses (exit still 0 as long as there was at least one external user turn). |
-| `stoppedNaturally` | `bool` | Strict bool. Derived from schema markers, not a heuristic. |
+| `actions` | `array[string]` | Always present. May be an empty array if the session contained no state-changing tool uses (exit still 0 as long as there was at least one external user turn). **Emitted in chronological order** (as tool uses occurred in the transcript). Any re-ordering for presentation (e.g. "most specific first") is a consumer rendering concern — the CLI does not re-sort. **Bounded by `--max-actions` (default 50).** See CLI grammar for truncation behavior. |
+| `stoppedNaturally` | `bool \| null` | `true` when the last assistant turn's `stop_reason == "end_turn"` and no prevented-continuation marker was seen. `false` when a definitive interrupt signal was observed (`"max_tokens"`, `"tool_use"`, `"stop_sequence"`, or `preventedContinuation: true`). `null` when the signal is genuinely indeterminable (zero assistant entries, or missing `stop_reason` on the last assistant entry). JSON `null` — consumer must handle all three states. |
 
 ### Key order and formatting
 
@@ -202,6 +203,8 @@ After classification, collapse **consecutive** records where `(type, target)` ma
 
 No global dedupe. Preserves the narrative sense of "the user did X, then Y, then X again."
 
+**Ordering guarantee:** actions are emitted in strict chronological order of occurrence in the transcript. This is the structured-data contract. Any reordering for presentation (e.g. `/whats-next`'s "most specific first" rendering rule) is the **consumer's** responsibility — the CLI does not re-sort and does not attempt to score specificity. Keeping the CLI deterministic-by-chronology means tests stay stable and the consumer owns its own rendering judgment.
+
 ### `intent` derivation
 
 1. Scan entries for first `type: "user"` AND `userType: "external"` entry.
@@ -223,21 +226,28 @@ No global dedupe. Preserves the narrative sense of "the user did X, then Y, then
 
 In practice, `cwd` is on every entry — the fallbacks are defensive.
 
-### `stoppedNaturally` derivation
+### `stoppedNaturally` derivation — tri-state
+
+Type is `bool | None` (emitted as JSON `true | false | null`).
 
 Walk entries once, track:
 
-- `last_assistant_stop_reason`: updated to `entry.message.stop_reason` on every `type: "assistant"` entry.
+- `has_any_assistant`: flips to `True` on the first `type: "assistant"` entry.
+- `last_assistant_stop_reason`: updated to `entry.message.stop_reason` on every `type: "assistant"` entry (may end as `None` if the key was absent or empty).
 - `prevented_continuation`: set to `True` if any `type: "system"` entry has `subtype: "stop_hook_summary"` AND `preventedContinuation: true`.
 
-Return `True` iff:
-- `last_assistant_stop_reason == "end_turn"`, AND
-- `not prevented_continuation`.
+Resolution:
 
-Return `False` otherwise — specifically when:
-- Last assistant stop_reason is `"max_tokens"`, `"tool_use"`, or `"stop_sequence"`.
-- `preventedContinuation: true` was recorded.
-- No assistant entries exist (malformed/empty session).
+| Condition | Result |
+|---|---|
+| `not has_any_assistant` | `None` (nothing to judge) |
+| `last_assistant_stop_reason is None` (missing/empty) | `None` (signal absent) |
+| `prevented_continuation == True` | `False` (definitive interrupt) |
+| `last_assistant_stop_reason == "end_turn"` | `True` |
+| `last_assistant_stop_reason in ("max_tokens", "tool_use", "stop_sequence")` | `False` |
+| Any other non-empty `stop_reason` value | `None` (unknown variant — don't guess) |
+
+**Rationale for tri-state:** conflating "we saw a signal that says not natural" with "we couldn't determine anything" costs the consumer real information. A Claude-written consumer handles `null` trivially (skip the "stopped naturally" indicator in the rendered recap). The reviewer specifically asked for this distinction during cross-repo review.
 
 This is derivable from the schema — not a heuristic.
 
@@ -264,7 +274,7 @@ class SessionSummary:
     project: str
     intent: str
     actions: list[str]
-    stopped_naturally: bool
+    stopped_naturally: bool | None   # maps to JSON true | false | null
 ```
 
 ### `--format text` shape (debug view)
@@ -272,7 +282,7 @@ class SessionSummary:
 ```
 Project: claude-usage
 Intent: Implement the session-summary subcommand...
-Stopped naturally: yes
+Stopped naturally: yes    # "yes" | "no" | "unknown" — maps to the tri-state bool|None
 
 Actions:
   - Edited claude_usage/cli/session_summary.py
@@ -290,13 +300,19 @@ Not a consumer contract — developer-only.
 | Code | Condition | Stderr message |
 |---|---|---|
 | `0` | Success — JSON written to stdout | *(silent)* |
-| `1` | `--path` missing, unreadable, permission denied, or a directory | `session-summary: cannot read transcript at '<path>': <OS error>` |
+| `1` | Any pre-parse IO failure against `--path`, specifically: (a) file does not exist, (b) permission denied, (c) path exists but is a directory or special file, (d) disk/network read error before or during the read, or (e) any other `OSError` subclass raised by `open()` or iteration | `session-summary: cannot read transcript at '<path>': <OS error class>: <message>` |
 | `2` | Transcript parsed successfully but contains zero entries with `type: "user"` AND `userType: "external"` (e.g. transcript consists only of agent-setting / attachment / system entries, or the file is effectively empty after JSONL parse) | `session-summary: transcript '<path>' contains no user turns` |
-| `3` | File readable but contains no valid JSONL (every non-blank line fails `json.loads`) | `session-summary: transcript '<path>' is not valid JSONL` |
+| `3` | File readable but contains no valid JSONL — every non-blank line fails `json.loads` | `session-summary: transcript '<path>' is not valid JSONL` |
 
 **Partial-malformed tolerance:** individual lines failing `json.loads` are skipped silently. Exit 3 fires only when **zero** lines parse. Matches existing `parser.py` line-skip behavior.
 
-**Non-zero exits produce nothing on stdout** — no partial JSON, no header text. Stdout is reserved for the success contract.
+### stdout/stderr discipline
+
+**On non-zero exit** (codes 1, 2, 3): stdout is empty — no partial JSON, no header text, no whitespace. Exactly one line on stderr matching the table above, terminated with a newline. No other output.
+
+**On success (exit 0):** stdout contains exactly the JSON payload — pretty-printed per "Key order and formatting" — followed by a single trailing newline. No progress messages, no status banners, no leading/trailing whitespace, no log output on stdout. Any non-fatal warnings (e.g. "skipped 3 malformed lines") go to stderr. This matches the existing `dashboard --format json` convention (see `__main__.py`: `status_file = sys.stderr if args.output_format == "json" else sys.stdout`) — `session-summary` adopts the same pattern.
+
+The contract for downstream callers: **stdout on exit 0 is always a parseable JSON document, nothing more, nothing less.**
 
 ---
 
@@ -325,8 +341,15 @@ Sanitization helper lives at `tests/fixtures/sanitize_transcript.py` so future f
 | `test_intent_falls_back_for_slash_command_only` | Pure `/project-review` session | `intent == "Ran /project-review"` | Design: fallback |
 | `test_stopped_naturally_false_on_max_tokens` | Final stop_reason=max_tokens | `stoppedNaturally: false` | Design: terminal markers |
 | `test_stopped_naturally_false_on_prevented_continuation` | system entry with preventedContinuation=true | `stoppedNaturally: false` | Design: terminal markers |
+| `test_stopped_naturally_null_on_no_assistant_turns` | User turns but zero assistant entries | `stoppedNaturally: null` | Design: tri-state |
+| `test_stopped_naturally_null_on_missing_stop_reason` | Final assistant entry lacks `stop_reason` key | `stoppedNaturally: null` | Design: tri-state |
+| `test_actions_truncated_at_default_cap` | Transcript producing > 50 distinct actions | Actions list length ≤ 50; final element is the `… (<K> additional actions omitted)` sentinel | Design: `--max-actions` default |
+| `test_actions_respects_max_actions_override` | Same fixture, invoked with `--max-actions 5` | Actions list length ≤ 5; sentinel appended | Design: `--max-actions` override |
+| `test_actions_cap_zero_disables_truncation` | Same fixture, invoked with `--max-actions 0` | Actions list contains all generated actions; no sentinel | Design: `--max-actions 0` |
+| `test_stdout_on_error_is_empty` | Any error-path invocation (missing file, exit 1) | `stdout == ""`, stderr contains exactly one line | Design: stdout/stderr discipline |
+| `test_stdout_on_success_is_pure_json` | Happy path | `json.loads(stdout)` succeeds; stdout has no lines before/after the JSON document | Design: stdout/stderr discipline |
 
-~10 tests. All AC items (acceptance criteria #1–#5 from issue #19) covered. No new dev dependencies beyond existing `pytest`.
+~15 tests. All AC items (acceptance criteria #1–#5 from issue #19) covered. No new dev dependencies beyond existing `pytest`.
 
 ### Coverage gate
 
