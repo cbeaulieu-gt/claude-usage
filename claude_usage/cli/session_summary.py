@@ -711,7 +711,20 @@ def run(args: argparse.Namespace) -> int:
         )
         return EXIT_IO_FAILURE
 
-    # Remaining logic lands in Tasks 4.2, 4.3, 4.4.
+    # ── Phase 4.2: no user turns ─────────────────────────────────────
+    has_user_turns = any(
+        entry.get("type") == "user"
+        and entry.get("userType") == "external"
+        for entry in entries
+    )
+    if not has_user_turns:
+        print(
+            f"session-summary: transcript '{path}' contains no user turns",
+            file=sys.stderr,
+        )
+        return EXIT_NO_USER_TURNS
+
+    # Remaining logic lands in Tasks 4.3, 4.4.
     raise NotImplementedError(
-        "remaining logic lands in Tasks 4.2, 4.3, 4.4"
+        "remaining logic lands in Tasks 4.3, 4.4"
     )

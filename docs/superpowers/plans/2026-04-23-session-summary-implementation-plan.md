@@ -4584,7 +4584,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   The three sub-cases each require a fixture file. Add fixture creation inline
   in the tests using `tmp_path` so no checked-in fixture is required (the
@@ -4654,7 +4654,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert "contains no user turns" in result.stderr
   ```
 
-- [ ] **Step 2: Run → confirm all three fail.**
+- [x] **Step 2: Run → confirm all three fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestExitNoUserTurns -v
@@ -4664,7 +4664,7 @@ where `K` is the count of dropped entries — is appended. Setting
   traceback, which produces a non-zero exit code (likely 1 from the exception),
   not exit code 2.
 
-- [ ] **Step 3: Add the exit-2 branch to `run`.**
+- [x] **Step 3: Add the exit-2 branch to `run`.**
 
   Replace the `NotImplementedError` sentinel in `run` with the exit-2 check,
   leaving a new sentinel for the remaining path:
@@ -4695,7 +4695,7 @@ where `K` is the count of dropped entries — is appended. Setting
   exits 2. The system-entries-only fixture also has no `userType == "external"`
   entries → same path.
 
-- [ ] **Step 4: Run → confirm all three pass; re-run Task 4.1 test to confirm
+- [x] **Step 4: Run → confirm all three pass; re-run Task 4.1 test to confirm
   no regression.**
 
   ```bash
@@ -4705,7 +4705,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all four tests PASSED.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

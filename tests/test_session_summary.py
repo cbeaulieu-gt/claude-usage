@@ -1259,6 +1259,65 @@ class TestMaxActionsCap:
         )
 
 
+class TestExitNoUserTurns:
+    """Exit 2 when readable transcript has no external user turns."""
+
+    def test_empty_session_exits_2(self) -> None:
+        """Agent-setting / system-only transcript → exit 2."""
+        fixture = (
+            _Path("tests/fixtures/session_summaries")
+            / "empty_no_user_turns.jsonl"
+        )
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(fixture),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "contains no user turns" in result.stderr
+
+    def test_zero_byte_file_exits_2(self, tmp_path: pytest.TempPathFactory) -> None:
+        """Zero-byte file → exit 2 (not exit 3)."""
+        zero_byte = tmp_path / "zero_byte.jsonl"
+        zero_byte.write_text("")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(zero_byte),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "contains no user turns" in result.stderr
+
+    def test_whitespace_only_file_exits_2(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """File with only blank lines → exit 2 (not exit 3)."""
+        ws_only = tmp_path / "whitespace_only.jsonl"
+        ws_only.write_text("\n   \n\t\n")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(ws_only),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "contains no user turns" in result.stderr
+
+
 class TestErrorPaths:
     """Tests for non-zero exit codes and stdout/stderr discipline."""
 
