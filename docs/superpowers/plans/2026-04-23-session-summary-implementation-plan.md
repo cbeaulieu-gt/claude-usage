@@ -839,7 +839,7 @@ and resolves Open Question #2 from the spec.
 - Create: `tests/fixtures/session_summaries/mcp_both_forms.jsonl`
 - Create: `tests/fixtures/session_summaries/consecutive_edits_same_file.jsonl`
 
-- [ ] **Step 1: Create `tests/fixtures/sanitize_transcript.py`.**
+- [x] **Step 1: Create `tests/fixtures/sanitize_transcript.py`.**
 
   This script reads a real Claude Code transcript from a path given on the
   command line, strips identifying data, and writes sanitized JSONL to stdout.
@@ -942,7 +942,7 @@ and resolves Open Question #2 from the spec.
       main()
   ```
 
-- [ ] **Step 2: Create `tests/fixtures/session_summaries/happy_path.jsonl`.**
+- [x] **Step 2: Create `tests/fixtures/session_summaries/happy_path.jsonl`.**
 
   This fixture drives `test_happy_path_emits_contract` and provides edit,
   bash, and agent-dispatch tool-use blocks. The `cwd` field is present so
@@ -960,7 +960,7 @@ and resolves Open Question #2 from the spec.
   {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Implementation complete."}],"model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":130,"output_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"a-004","timestamp":"2026-04-20T09:00:15.000Z","sessionId":"sess-happy"}
   ```
 
-- [ ] **Step 3: Create `tests/fixtures/session_summaries/empty_no_user_turns.jsonl`.**
+- [x] **Step 3: Create `tests/fixtures/session_summaries/empty_no_user_turns.jsonl`.**
 
   Contains only agent-setting and system entries — zero external user turns.
   Used by `test_empty_session_exits_2`.
@@ -970,7 +970,7 @@ and resolves Open Question #2 from the spec.
   {"type":"system","subtype":"init","timestamp":"2026-04-20T10:00:01.000Z","sessionId":"sess-empty","uuid":"sys-001"}
   ```
 
-- [ ] **Step 4: Create `tests/fixtures/session_summaries/all_malformed.jsonl`.**
+- [x] **Step 4: Create `tests/fixtures/session_summaries/all_malformed.jsonl`.**
 
   Every non-blank line fails `json.loads`. Used by `test_malformed_file_exits_3`.
 
@@ -983,7 +983,7 @@ and resolves Open Question #2 from the spec.
   Write these three lines verbatim — no quotes around the block, these are
   the actual file contents.
 
-- [ ] **Step 5: Create `tests/fixtures/session_summaries/slash_command_only.jsonl`.**
+- [x] **Step 5: Create `tests/fixtures/session_summaries/slash_command_only.jsonl`.**
 
   The external user turn contains only the slash-command XML wrapper — no
   surviving text after stripping. Used by `test_intent_falls_back_for_slash_command_only`.
@@ -994,7 +994,7 @@ and resolves Open Question #2 from the spec.
   {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Running project review."}],"model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":20,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"a-001","timestamp":"2026-04-20T11:00:02.000Z","sessionId":"sess-slash"}
   ```
 
-- [ ] **Step 6: Create `tests/fixtures/session_summaries/zero_byte.jsonl`.**
+- [x] **Step 6: Create `tests/fixtures/session_summaries/zero_byte.jsonl`.**
 
   Zero-byte file. Create it with:
 
@@ -1005,7 +1005,7 @@ and resolves Open Question #2 from the spec.
   The file must be committed as empty (zero bytes). Git will track it as long
   as the parent directory is tracked.
 
-- [ ] **Step 7: Create `tests/fixtures/session_summaries/whitespace_only.jsonl`.**
+- [x] **Step 7: Create `tests/fixtures/session_summaries/whitespace_only.jsonl`.**
 
   Three blank lines — no non-whitespace content. Git may strip trailing
   newlines; write a file whose every line is whitespace-only.
@@ -1023,7 +1023,7 @@ and resolves Open Question #2 from the spec.
   printf '\n\n\n' > tests/fixtures/session_summaries/whitespace_only.jsonl
   ```
 
-- [ ] **Step 8: Create `tests/fixtures/session_summaries/max_tokens_stop.jsonl`.**
+- [x] **Step 8: Create `tests/fixtures/session_summaries/max_tokens_stop.jsonl`.**
 
   Final assistant entry has `stop_reason: "max_tokens"`. Used by
   `test_stopped_naturally_false_on_max_tokens`.
@@ -1033,7 +1033,7 @@ and resolves Open Question #2 from the spec.
   {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Working..."}],"model":"claude-sonnet-4-6","stop_reason":"max_tokens","usage":{"input_tokens":200,"output_tokens":1024,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"a-001","timestamp":"2026-04-20T12:00:10.000Z","sessionId":"sess-maxtok"}
   ```
 
-- [ ] **Step 9: Create `tests/fixtures/session_summaries/prevented_continuation.jsonl`.**
+- [x] **Step 9: Create `tests/fixtures/session_summaries/prevented_continuation.jsonl`.**
 
   Includes a `type: "system"` entry with `subtype: "stop_hook_summary"` and
   `preventedContinuation: true`. Used by
@@ -1045,7 +1045,7 @@ and resolves Open Question #2 from the spec.
   {"type":"system","subtype":"stop_hook_summary","preventedContinuation":true,"timestamp":"2026-04-20T13:00:06.000Z","sessionId":"sess-prev","uuid":"sys-001"}
   ```
 
-- [ ] **Step 10: Create `tests/fixtures/session_summaries/no_assistant_entries.jsonl`.**
+- [x] **Step 10: Create `tests/fixtures/session_summaries/no_assistant_entries.jsonl`.**
 
   Has an external user turn but zero assistant entries. Used by
   `test_stopped_naturally_null_on_no_assistant_turns`.
@@ -1054,7 +1054,7 @@ and resolves Open Question #2 from the spec.
   {"type":"user","message":{"role":"user","content":"Just a question, no response yet."},"uuid":"u-001","timestamp":"2026-04-20T14:00:00.000Z","sessionId":"sess-noassist","userType":"external","cwd":"/home/user/claude-usage"}
   ```
 
-- [ ] **Step 11: Create `tests/fixtures/session_summaries/missing_stop_reason.jsonl`.**
+- [x] **Step 11: Create `tests/fixtures/session_summaries/missing_stop_reason.jsonl`.**
 
   Final assistant entry has no `stop_reason` key in the message. Used by
   `test_stopped_naturally_null_on_missing_stop_reason`.
@@ -1064,7 +1064,7 @@ and resolves Open Question #2 from the spec.
   {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"4."}],"model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"a-001","timestamp":"2026-04-20T15:00:01.000Z","sessionId":"sess-nostop"}
   ```
 
-- [ ] **Step 12: Create `tests/fixtures/session_summaries/over_fifty_actions.jsonl`.**
+- [x] **Step 12: Create `tests/fixtures/session_summaries/over_fifty_actions.jsonl`.**
 
   Produces more than 50 distinct (non-collapsible) actions. Each assistant
   entry uses a different target file so consecutive-collapse does not reduce
@@ -1135,7 +1135,7 @@ and resolves Open Question #2 from the spec.
   rm _gen_over_fifty.py
   ```
 
-- [ ] **Step 13: Create `tests/fixtures/session_summaries/mcp_both_forms.jsonl`.**
+- [x] **Step 13: Create `tests/fixtures/session_summaries/mcp_both_forms.jsonl`.**
 
   Contains two MCP tool-use entries — one plugin-scoped form and one direct
   form for the same logical server+method. Used by the MCP classification
@@ -1148,7 +1148,7 @@ and resolves Open Question #2 from the spec.
   {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":70,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"a-003","timestamp":"2026-04-20T17:00:05.000Z","sessionId":"sess-mcp"}
   ```
 
-- [ ] **Step 14: Create `tests/fixtures/session_summaries/consecutive_edits_same_file.jsonl`.**
+- [x] **Step 14: Create `tests/fixtures/session_summaries/consecutive_edits_same_file.jsonl`.**
 
   Three consecutive Edit tool-use blocks all targeting the same file path.
   After collapse, only one `ActionRecord` for that file should remain. Used by
@@ -1162,7 +1162,7 @@ and resolves Open Question #2 from the spec.
   {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Fixed."}],"model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":55,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"a-004","timestamp":"2026-04-20T18:00:05.000Z","sessionId":"sess-collapse"}
   ```
 
-- [ ] **Step 15: Commit.**
+- [x] **Step 15: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
