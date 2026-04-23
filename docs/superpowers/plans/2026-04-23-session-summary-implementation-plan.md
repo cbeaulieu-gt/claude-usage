@@ -1187,7 +1187,7 @@ and resolves Open Question #2 from the spec.
 - Modify: `claude_usage/cli/session_summary.py` (currently contains only
   the `NotImplementedError` stub from Task 1.2)
 
-- [ ] **Step 1: Replace the stub with full module scaffolding.**
+- [x] **Step 1: Replace the stub with full module scaffolding.**
 
   The stub defined by Task 1.2 raises `NotImplementedError` in `run()`. This
   step replaces the entire file with the final module skeleton: module
@@ -1398,7 +1398,7 @@ and resolves Open Question #2 from the spec.
       )
   ```
 
-- [ ] **Step 2: Write a minimal failing test for the dataclasses.**
+- [x] **Step 2: Write a minimal failing test for the dataclasses.**
 
   In `tests/test_session_summary.py`, add the following (this is the first
   content in that file — create the file if it does not yet exist):
@@ -1459,7 +1459,7 @@ and resolves Open Question #2 from the spec.
           assert EXIT_NOT_JSONL == 3
   ```
 
-- [ ] **Step 3: Run the test — confirm it passes.**
+- [x] **Step 3: Run the test — confirm it passes.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -1469,7 +1469,7 @@ and resolves Open Question #2 from the spec.
   constants are correct. The `build_session_summary` stub raises
   `NotImplementedError` but is not called by these tests.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
