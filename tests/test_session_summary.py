@@ -1032,3 +1032,103 @@ class TestToolClassification:
             target="BrandNewTool",
             summary="Used BrandNewTool tool",
         )
+
+
+class TestCollapseConsecutive:
+    """Tests for _collapse_consecutive semantics."""
+
+    def test_consecutive_edits_collapse(self) -> None:
+        """Three consecutive Edits to the same file collapse to one action.
+
+        Uses the consecutive_edits_same_file.jsonl fixture from Phase 2
+        which has three Edit tool-use blocks all targeting
+        'claude_usage/parser.py'. After _collect_tool_uses (which calls
+        _collapse_consecutive internally), only one ActionRecord remains.
+        """
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/"
+            "consecutive_edits_same_file.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+
+        assert len(summary.actions) == 1
+        assert summary.actions[0] == "Edited claude_usage/parser.py"
+
+    def test_non_adjacent_edits_do_not_collapse(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Edits interleaved by a different file are not collapsed.
+
+        Sequence: Edit A → Edit B → Edit A again.
+        The two Edit A calls are non-adjacent, so all three records are
+        preserved — chronological order and narrative sense are maintained.
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        def _edit_entry(uid: str, file_path: str, seq: int) -> dict:
+            """Build one assistant entry with a single Edit tool use."""
+            return {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": f"tu-{seq:03d}",
+                        "name": "Edit",
+                        "input": {
+                            "file_path": file_path,
+                            "old_string": f"old{seq}",
+                            "new_string": f"new{seq}",
+                        },
+                    }],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": (
+                        "end_turn" if seq == 3 else "tool_use"
+                    ),
+                    "usage": {
+                        "input_tokens": 30,
+                        "output_tokens": 10,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+                "uuid": uid,
+                "timestamp": f"2026-04-20T09:00:0{seq}.000Z",
+                "sessionId": "sess-nonadj",
+            }
+
+        user_entry = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": "Edit A, then B, then A again.",
+            },
+            "uuid": "u-001",
+            "timestamp": "2026-04-20T09:00:00.000Z",
+            "sessionId": "sess-nonadj",
+            "userType": "external",
+            "cwd": "/home/user/myproject",
+        }
+
+        lines = [
+            json.dumps(user_entry),
+            json.dumps(_edit_entry("a-001", "src/a.py", 1)),
+            json.dumps(_edit_entry("a-002", "src/b.py", 2)),
+            json.dumps(_edit_entry("a-003", "src/a.py", 3)),
+        ]
+        fixture = tmp_path / "non_adjacent.jsonl"
+        fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        summary = build_session_summary(_parse_fixture(fixture))
+
+        # All three edits must be present — none collapsed.
+        assert len(summary.actions) == 3
+        assert summary.actions[0] == "Edited src/a.py"
+        assert summary.actions[1] == "Edited src/b.py"
+        assert summary.actions[2] == "Edited src/a.py"

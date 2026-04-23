@@ -3765,7 +3765,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add two tests — `test_consecutive_edits_collapse` and
+- [x] **Step 1: Add two tests — `test_consecutive_edits_collapse` and
   `test_non_adjacent_edits_do_not_collapse`.**
 
   ```python
@@ -3869,7 +3869,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
           assert summary.actions[2] == "Edited src/a.py"
   ```
 
-- [ ] **Step 2: Run → confirm both tests pass (green from Task 3.4).**
+- [x] **Step 2: Run → confirm both tests pass (green from Task 3.4).**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestCollapseConsecutive -v
@@ -3915,7 +3915,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
   Verify this is what `session_summary.py` contains. If it differs, correct
   it and re-run.
 
-- [ ] **Step 3: Run full suite → confirm no regressions.**
+- [x] **Step 3: Run full suite → confirm no regressions.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3923,7 +3923,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
 
   Expected: all tests pass.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
