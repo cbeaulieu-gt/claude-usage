@@ -7,30 +7,82 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 24px; }
-  h1 { font-size: 1.6rem; color: #f0f6fc; margin-bottom: 4px; }
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #21262d; padding-bottom: 16px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: clamp(12px, 3vw, 24px);
+    min-width: 0;
+  }
+  /* Constrain ultra-wide layouts */
+  .page-inner {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  h1 { font-size: clamp(1.2rem, 3vw, 1.6rem); color: #f0f6fc; margin-bottom: 4px; }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #21262d;
+    padding-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
   .header-left { display: flex; flex-direction: column; }
   .header-subtitle { color: #8b949e; font-size: 0.85rem; }
-  .controls { display: flex; gap: 8px; align-items: center; }
-  .controls select, .controls input { background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .controls select, .controls input {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
   .controls label { font-size: 0.8rem; color: #8b949e; }
 
-  /* Budget gauges */
-  .gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  /* Budget gauges — fluid: 3 cols → 2 → 1 */
+  .gauges {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
   .gauge { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 16px; }
-  .gauge-label { font-size: 0.8rem; color: #8b949e; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .gauge-label {
+    font-size: 0.8rem;
+    color: #8b949e;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
   .gauge-bar { height: 10px; background: #21262d; border-radius: 5px; overflow: hidden; }
   .gauge-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
   .gauge-fill.green { background: linear-gradient(90deg, #238636, #2ea043); }
   .gauge-fill.yellow { background: linear-gradient(90deg, #d29922, #e3b341); }
   .gauge-fill.red { background: linear-gradient(90deg, #da3633, #f85149); }
   .gauge-fill.neutral { background: linear-gradient(90deg, #30363d, #8b949e); }
-  .gauge-value { font-size: 1.4rem; font-weight: 600; color: #f0f6fc; margin-bottom: 2px; }
+  .gauge-value {
+    font-size: clamp(1.1rem, 3vw, 1.4rem);
+    font-weight: 600;
+    color: #f0f6fc;
+    margin-bottom: 2px;
+  }
 
-  /* Card grid */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-  .card { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 20px; }
+  /* Two-column card grid — collapses below 800 px */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 20px; min-width: 0; }
   .card h3 { font-size: 0.95rem; color: #f0f6fc; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .card h3 .icon { font-size: 1.1rem; }
   .chart-container { position: relative; height: 260px; }
@@ -48,15 +100,50 @@
   .pct-bar { display: inline-block; height: 6px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
 
   /* Session drill-down */
-  .session-panel { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+  .session-panel {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
   .session-panel h3 { font-size: 0.95rem; color: #f0f6fc; margin-bottom: 12px; }
-  .session-header-row { display: grid; grid-template-columns: 140px 180px 1fr 80px 120px 70px; gap: 12px; padding: 8px 0; border-bottom: 1px solid #21262d; font-size: 0.8rem; color: #8b949e; font-weight: 500; }
-  .session-row { display: grid; grid-template-columns: 140px 180px 1fr 80px 120px 70px; gap: 12px; padding: 10px 0; border-bottom: 1px solid #21262d; font-size: 0.85rem; align-items: center; }
+
+  /* Desktop session table layout */
+  .session-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .session-header-row {
+    display: grid;
+    grid-template-columns: 140px 180px 1fr 80px 120px 70px;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #21262d;
+    font-size: 0.8rem;
+    color: #8b949e;
+    font-weight: 500;
+    min-width: 680px;
+  }
+  .session-row {
+    display: grid;
+    grid-template-columns: 140px 180px 1fr 80px 120px 70px;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #21262d;
+    font-size: 0.85rem;
+    align-items: center;
+    min-width: 680px;
+  }
   .session-row:last-child { border-bottom: none; }
   .project-name { color: #ffa657; font-size: 0.8rem; }
   .session-time { color: #8b949e; }
   .session-agents { display: flex; gap: 4px; flex-wrap: wrap; }
-  .agent-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; background: #21262d; color: #c9d1d9; }
+  .agent-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    background: #21262d;
+    color: #c9d1d9;
+  }
   .mini-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; }
   .mini-bar .opus { background: #8b5cf6; }
   .mini-bar .sonnet { background: #2ea043; }
@@ -67,9 +154,76 @@
   .drill-hint { font-size: 0.75rem; color: #8b949e; font-style: italic; margin-top: 8px; }
   .clickable { cursor: pointer; }
   .clickable:hover td { background: #1c2128; }
+
+  /* ── Responsive breakpoints ──────────────────────────────────────────────── */
+
+  /* ≤ 900 px: gauge grid already auto-fills to 2 cols via minmax;
+     explicitly cap at 2 to avoid 3-wide at awkward mid-sizes */
+  @media (max-width: 900px) {
+    .gauges {
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    }
+  }
+
+  /* ≤ 800 px: collapse two-column card sections */
+  @media (max-width: 800px) {
+    .grid-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ≤ 600 px: single-column gauge grid, tighter padding */
+  @media (max-width: 600px) {
+    .gauges {
+      grid-template-columns: 1fr;
+    }
+    body {
+      padding: 12px;
+    }
+    .card {
+      padding: 14px;
+    }
+    .session-panel {
+      padding: 14px;
+    }
+    /* Session rows: stacked card layout on narrow screens */
+    .session-header-row {
+      display: none;
+    }
+    .session-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      padding: 12px 0;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .session-row::before {
+      content: attr(data-time);
+      font-size: 0.75rem;
+      color: #8b949e;
+    }
+    .mini-bar {
+      max-width: 200px;
+    }
+  }
+
+  /* ≤ 400 px: further tighten chart containers to avoid overflow */
+  @media (max-width: 400px) {
+    .chart-container {
+      height: 200px;
+    }
+    .gauge-value {
+      font-size: 1.1rem;
+    }
+  }
 </style>
 </head>
 <body>
+<div class="page-inner">
 
 <div class="header">
   <div class="header-left">
@@ -168,10 +322,12 @@
 <div class="session-panel">
   <h3>&#x1f50d; Session Drill-Down</h3>
   <div id="sessionContainer">
-    <div class="session-header-row">
-      <div>Time</div><div>Project</div><div>Agents</div><div>Tokens</div><div>Model Split</div><div>Duration</div>
+    <div class="session-scroll">
+      <div class="session-header-row">
+        <div>Time</div><div>Project</div><div>Agents</div><div>Tokens</div><div>Model Split</div><div>Duration</div>
+      </div>
+      <div id="sessionRows"></div>
     </div>
-    <div id="sessionRows"></div>
   </div>
 </div>
 
@@ -744,5 +900,7 @@ function applyFilter() {
 // Initial render
 applyFilter();
 </script>
+
+</div><!-- /.page-inner -->
 </body>
 </html>
