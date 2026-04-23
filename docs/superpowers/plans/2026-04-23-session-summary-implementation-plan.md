@@ -2811,7 +2811,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Confirm `test_action_classification_agent_dispatch` exists and
+- [x] **Step 1: Confirm `test_action_classification_agent_dispatch` exists and
   check its fixture contract.**
 
   The test was written in Task 3.5 and lives in `TestToolClassification`. It
@@ -2879,7 +2879,7 @@ step. No placeholders.
       )
   ```
 
-- [ ] **Step 2: Run → confirm both agent tests pass (green from Task 3.5).**
+- [x] **Step 2: Run → confirm both agent tests pass (green from Task 3.5).**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification \
@@ -2890,7 +2890,7 @@ step. No placeholders.
   `test_action_classification_agent_dispatch_record_fields` pass. This is not
   a red step — it is a contract-verification step.
 
-- [ ] **Step 3: Confirm the dispatch branch in `_classify_tool_use`.**
+- [x] **Step 3: Confirm the dispatch branch in `_classify_tool_use`.**
 
   The Agent branch sits after the Bash/PowerShell block and before the final
   `return None`. For reference, the surrounding context in the function
@@ -2930,7 +2930,7 @@ step. No placeholders.
 
   No code change is needed here if Task 3.5 implemented the branch correctly.
 
-- [ ] **Step 4: Run full suite → confirm no regressions.**
+- [x] **Step 4: Run full suite → confirm no regressions.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2938,7 +2938,7 @@ step. No placeholders.
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

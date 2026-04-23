@@ -603,3 +603,56 @@ class TestToolClassification:
         summary = build_session_summary(_parse_fixture(fixture))
         assert len(summary.actions) == 1
         assert summary.actions[0] == "Dispatched code-reviewer sub-agent"
+
+    def test_action_classification_agent_dispatch_record_fields(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Agent tool_use classifies to ActionRecord with correct field values.
+
+        Asserts all four ActionRecord fields explicitly:
+        - type == "agent_dispatch"
+        - raw_tool == "Agent"
+        - target == subagent_type value from input
+        - summary == "Dispatched <subagent_type> sub-agent"
+        """
+        from claude_usage.cli.session_summary import (
+            ActionRecord,
+            _collect_tool_uses,
+        )
+
+        # Minimal JSONL — one assistant entry with an Agent tool use.
+        entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-001",
+                    "name": "Agent",
+                    "input": {
+                        "subagent_type": "code-writer",
+                        "description": "Write the implementation",
+                    },
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 40,
+                    "output_tokens": 15,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-001",
+            "timestamp": "2026-04-20T09:00:01.000Z",
+            "sessionId": "sess-agent",
+        }
+        records = _collect_tool_uses([entry])
+
+        assert len(records) == 1
+        assert records[0] == ActionRecord(
+            type="agent_dispatch",
+            raw_tool="Agent",
+            target="code-writer",
+            summary="Dispatched code-writer sub-agent",
+        )
