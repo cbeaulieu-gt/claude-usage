@@ -487,7 +487,7 @@ and resolves Open Question #2 from the spec.
 - Create: `claude_usage/cli/session_summary.py` (stub only — full implementation in Phase 2+)
 - Create: `tests/test_cli_subcommands.py`
 
-- [ ] **Step 1: Write the failing test first.**
+- [x] **Step 1: Write the failing test first.**
 
   Create `tests/test_cli_subcommands.py` with the following content:
 
@@ -541,7 +541,7 @@ and resolves Open Question #2 from the spec.
       assert result.returncode != 0
   ```
 
-- [ ] **Step 2: Run the test — confirm it fails.**
+- [x] **Step 2: Run the test — confirm it fails.**
 
   ```bash
   uv run pytest tests/test_cli_subcommands.py -x -v
@@ -552,7 +552,7 @@ and resolves Open Question #2 from the spec.
     will not contain "session-summary".
   - `test_old_flag_only_form_exits_nonzero` — current CLI accepts `--format json` and exits 0.
 
-- [ ] **Step 3: Create the `session_summary.py` stub.**
+- [x] **Step 3: Create the `session_summary.py` stub.**
 
   The stub must make `from claude_usage.cli import session_summary` succeed so `__main__.py` can
   import it. Full implementation comes in Phase 2+.
@@ -629,7 +629,7 @@ and resolves Open Question #2 from the spec.
       )
   ```
 
-- [ ] **Step 4: Rewrite `claude_usage/__main__.py`.**
+- [x] **Step 4: Rewrite `claude_usage/__main__.py`.**
 
   Full new file contents (~30 lines):
 
@@ -679,7 +679,7 @@ and resolves Open Question #2 from the spec.
       main()
   ```
 
-- [ ] **Step 5: Run the full test suite.**
+- [x] **Step 5: Run the full test suite.**
 
   ```bash
   uv run pytest -x
@@ -690,7 +690,7 @@ and resolves Open Question #2 from the spec.
   `subprocess` will now hit the subparser dispatcher — confirm those still pass or update
   their invocation to `claude-usage dashboard [flags]`.)
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
   ```bash
   git add claude_usage/__main__.py \
