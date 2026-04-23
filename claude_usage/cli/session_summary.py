@@ -1,21 +1,148 @@
-"""Session-summary subcommand for claude-usage (stub).
+"""Session-summary subcommand: derive a structured recap from a transcript.
 
-Full implementation added in Phase 2. This file exists so that
-__main__.py can import it without ImportError during the Phase 1
-refactor tasks.
+Walks a Claude Code transcript JSONL once, derives project, intent,
+actions, and stoppedNaturally deterministically, and emits the result
+as pretty-printed JSON to stdout.
+
+Exit codes:
+    0  Success — JSON written to stdout.
+    1  IO failure — file missing, unreadable, or other OSError.
+    2  No user turns — transcript has no external user entries.
+    3  Not JSONL — file has content but every line fails json.loads.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 
 EXIT_OK = 0
 EXIT_IO_FAILURE = 1
 EXIT_NO_USER_TURNS = 2
 EXIT_NOT_JSONL = 3
 
+DEFAULT_MAX_ACTIONS: int = 50
 
-def build_parser(parent: argparse._SubParsersAction) -> argparse.ArgumentParser:
+
+@dataclass(frozen=True)
+class ActionRecord:
+    """A single classified tool-use action from a transcript.
+
+    Attributes:
+        type: Action category — one of "edit", "bash", "agent_dispatch",
+            "mcp", or "other".
+        raw_tool: The original tool name as it appears in the transcript.
+        target: The primary subject of the action (file path, command,
+            agent name, MCP server.method) — used as the collapse key.
+        summary: A past-tense human-readable string suitable for display.
+    """
+
+    type: str
+    raw_tool: str
+    target: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    """Derived session recap ready for JSON serialisation.
+
+    Attributes:
+        project: Repository or project name. Never empty; falls back to
+            "unknown" when undetectable.
+        intent: One-sentence description of what the session set out to do.
+            Never empty; falls back to "Ran /<command>" for slash-command
+            sessions or "Session on <project>" as a final fallback.
+        actions: Chronologically ordered list of past-tense action strings,
+            bounded by the max_actions cap. May be empty when the session
+            contained no state-changing tool uses.
+        stopped_naturally: True when the last assistant turn ended cleanly
+            ("end_turn"), False on any definitive interrupt signal, or None
+            when the signal is indeterminate (no assistant entries, or
+            stop_reason absent/unrecognised).
+    """
+
+    project: str
+    intent: str
+    actions: list[str]
+    stopped_naturally: bool | None
+
+
+def build_session_summary(
+    entries: list[dict],
+    *,
+    project_slug_fallback: str | None = None,
+    max_actions: int = DEFAULT_MAX_ACTIONS,
+) -> SessionSummary:
+    """Build a SessionSummary from already-parsed transcript entries.
+
+    Pure function — no I/O. The caller (run()) is responsible for reading
+    the file and parsing JSONL; this function only classifies, derives,
+    and renders.
+
+    Args:
+        entries: Parsed JSONL entries (already filtered for successfully
+            decoded objects).
+        project_slug_fallback: Optional transcript-directory slug passed
+            through to `_derive_project` for the `decode_project_hash`
+            fallback when no `cwd` field appears on any entry.
+        max_actions: Soft cap on emitted actions; 0 disables the cap.
+
+    Returns:
+        Fully-populated SessionSummary.
+
+    Raises:
+        NotImplementedError: Temporarily, until Phase 3 fills this in.
+    """
+    raise NotImplementedError("build_session_summary — implemented in Phase 3")
+
+
+def render_json(summary: SessionSummary) -> str:
+    """Render a SessionSummary as a pretty-printed JSON string.
+
+    Key order matches the output contract: project, intent, actions,
+    stoppedNaturally. Uses json.dumps with indent=2 and ensure_ascii=False.
+
+    Args:
+        summary: The session summary to serialise.
+
+    Returns:
+        A JSON string ending with a trailing newline.
+
+    Raises:
+        NotImplementedError: Temporarily, until Phase 3 fills this in.
+    """
+    raise NotImplementedError("render_json — implemented in Phase 3")
+
+
+def render_text(summary: SessionSummary) -> str:
+    """Render a SessionSummary as a human-readable debug string.
+
+    Output format::
+
+        Project: <project>
+        Intent: <intent>
+        Stopped naturally: yes | no | unknown
+
+        Actions:
+          - <action 1>
+          - <action 2>
+
+    Args:
+        summary: The session summary to render.
+
+    Returns:
+        A multi-line string suitable for writing to stdout.
+
+    Raises:
+        NotImplementedError: Temporarily, until Phase 3 fills this in.
+    """
+    raise NotImplementedError("render_text — implemented in Phase 3")
+
+
+def build_parser(
+    parent: argparse._SubParsersAction,
+) -> argparse.ArgumentParser:
     """Register the 'session-summary' subparser and return it.
 
     Args:
@@ -39,11 +166,11 @@ def build_parser(parent: argparse._SubParsersAction) -> argparse.ArgumentParser:
         help="Output format: 'json' (default) or 'text' (debug view).",
     )
     p.add_argument(
-        "--max-actions", type=int, default=50,
+        "--max-actions", type=int, default=DEFAULT_MAX_ACTIONS,
         dest="max_actions",
         help=(
             "Soft cap on emitted actions. 0 disables the cap. "
-            "Default: 50."
+            f"Default: {DEFAULT_MAX_ACTIONS}."
         ),
     )
     return p
@@ -56,12 +183,13 @@ def run(args: argparse.Namespace) -> int:
         args: Parsed argument namespace from the session-summary subparser.
 
     Returns:
-        Integer exit code.
+        Integer exit code (EXIT_OK, EXIT_IO_FAILURE, EXIT_NO_USER_TURNS,
+        or EXIT_NOT_JSONL).
 
     Raises:
-        NotImplementedError: Always — full implementation pending Phase 2.
+        NotImplementedError: Temporarily, until Phase 3 fills this in.
     """
     raise NotImplementedError(
         "session-summary is not yet implemented. "
-        "Full implementation arrives in Phase 2."
+        "Full implementation arrives in Phase 3."
     )
