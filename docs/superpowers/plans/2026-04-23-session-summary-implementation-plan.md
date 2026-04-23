@@ -1499,7 +1499,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Write `test_happy_path_emits_contract` — confirm it fails.**
+- [x] **Step 1: Write `test_happy_path_emits_contract` — confirm it fails.**
 
   Add this test class to `tests/test_session_summary.py` (also add the
   `_parse_fixture` helper at the top of the file, before any test class,
@@ -1568,7 +1568,7 @@ step. No placeholders.
           assert summary.stopped_naturally is True
   ```
 
-- [ ] **Step 2: Run → confirm failure.**
+- [x] **Step 2: Run → confirm failure.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestBuildSessionSummary::test_happy_path_emits_contract -x
@@ -1577,7 +1577,7 @@ step. No placeholders.
   Expected failure: `NotImplementedError` from the `build_session_summary`
   stub. This is the correct red state — not an import error.
 
-- [ ] **Step 3: Implement a minimal `build_session_summary` using internal stubs.**
+- [x] **Step 3: Implement a minimal `build_session_summary` using internal stubs.**
 
   Replace the `build_session_summary` stub in `claude_usage/cli/session_summary.py`
   with the following. The four private helpers (`_derive_project`,
@@ -1751,7 +1751,7 @@ step. No placeholders.
   Also add `import json` and `import sys` at the top of the file, in the
   stdlib imports block, after `import argparse` and before `from dataclasses`.
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -1759,7 +1759,7 @@ step. No placeholders.
 
   Expected: all existing tests plus `test_happy_path_emits_contract` pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

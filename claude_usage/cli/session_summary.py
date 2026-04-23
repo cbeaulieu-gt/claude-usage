@@ -68,6 +68,126 @@ class SessionSummary:
     stopped_naturally: bool | None
 
 
+def _derive_project(entries: list[dict], slug_fallback: str | None = None) -> str:
+    """Derive the project name from transcript entries.
+
+    Strategy:
+    1. First entry with a non-empty ``cwd`` field → ``Path(cwd).name``.
+    2. Fallback: apply ``decode_project_hash`` to ``slug_fallback``
+       (the transcript-directory name passed in by ``run()``).
+    3. Final fallback: ``"unknown"``.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+        slug_fallback: Optional project-slug string from the transcript
+            directory name, used when no ``cwd`` field appears on any
+            entry.
+
+    Returns:
+        A non-empty project name string.
+    """
+    # Stub — returns hardcoded value matching happy_path fixture.
+    # Replaced by real logic in Task 3.2.
+    return "claude-usage"
+
+
+def _derive_intent(entries: list[dict], project: str) -> str:
+    """Derive the user's intent from the first external user turn.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+        project: The already-derived project name (used as fallback).
+
+    Returns:
+        A non-empty intent string.
+    """
+    # Stub — returns hardcoded value matching happy_path fixture.
+    # Replaced by real logic in Task 3.3.
+    return (
+        "Implement the session-summary subcommand for the /whats-next skill"
+    )
+
+
+def _collect_tool_uses(entries: list[dict]) -> list[ActionRecord]:
+    """Classify all tool-use content blocks from assistant entries.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+
+    Returns:
+        Chronologically ordered list of ActionRecord instances, with
+        consecutive records sharing (type, target) collapsed to one.
+    """
+    # Stub — returns hardcoded actions matching happy_path fixture.
+    # Replaced by real logic in Tasks 3.4–3.6.
+    return [
+        ActionRecord(
+            type="edit",
+            raw_tool="Edit",
+            target="claude_usage/cli/session_summary.py",
+            summary="Edited claude_usage/cli/session_summary.py",
+        ),
+        ActionRecord(
+            type="bash",
+            raw_tool="Bash",
+            target="uv run pytest tests/test_session_summary.py -x",
+            summary=(
+                "Ran `uv run pytest tests/test_session_summary.py -x`"
+            ),
+        ),
+        ActionRecord(
+            type="agent_dispatch",
+            raw_tool="Agent",
+            target="code-reviewer",
+            summary="Dispatched code-reviewer sub-agent",
+        ),
+    ]
+
+
+def _derive_stopped_naturally(
+    entries: list[dict],
+) -> bool | None:
+    """Determine whether the session ended naturally.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+
+    Returns:
+        True if last assistant stop_reason == "end_turn" and no
+        prevented-continuation marker was seen. False on a definitive
+        interrupt signal. None when the signal is indeterminate.
+    """
+    # Stub — returns True matching happy_path fixture.
+    # Replaced by real logic in Task 3.7 (next pass).
+    return True
+
+
+def _apply_max_actions_cap(
+    records: list[ActionRecord],
+    max_actions: int,
+) -> list[str]:
+    """Convert ActionRecords to summary strings, applying the cap.
+
+    When max_actions > 0 and len(records) > max_actions, keep the first
+    max_actions - 1 records and append a sentinel string describing how
+    many were omitted.
+
+    Args:
+        records: Classified, collapsed ActionRecord list.
+        max_actions: Cap value. 0 means no cap.
+
+    Returns:
+        List of past-tense action strings, bounded by the cap.
+    """
+    summaries = [r.summary for r in records]
+    if max_actions == 0 or len(summaries) <= max_actions:
+        return summaries
+    kept = summaries[: max_actions - 1]
+    dropped = len(summaries) - (max_actions - 1)
+    kept.append(f"… ({dropped} additional actions omitted)")
+    return kept
+
+
 def build_session_summary(
     entries: list[dict],
     *,
@@ -84,17 +204,25 @@ def build_session_summary(
         entries: Parsed JSONL entries (already filtered for successfully
             decoded objects).
         project_slug_fallback: Optional transcript-directory slug passed
-            through to `_derive_project` for the `decode_project_hash`
-            fallback when no `cwd` field appears on any entry.
+            through to ``_derive_project`` for the ``decode_project_hash``
+            fallback when no ``cwd`` field appears on any entry.
         max_actions: Soft cap on emitted actions; 0 disables the cap.
 
     Returns:
         Fully-populated SessionSummary.
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
     """
-    raise NotImplementedError("build_session_summary — implemented in Phase 3")
+    project = _derive_project(entries, project_slug_fallback)
+    intent = _derive_intent(entries, project)
+    records = _collect_tool_uses(entries)
+    stopped_naturally = _derive_stopped_naturally(entries)
+    action_strings = _apply_max_actions_cap(records, max_actions)
+
+    return SessionSummary(
+        project=project,
+        intent=intent,
+        actions=action_strings,
+        stopped_naturally=stopped_naturally,
+    )
 
 
 def render_json(summary: SessionSummary) -> str:
