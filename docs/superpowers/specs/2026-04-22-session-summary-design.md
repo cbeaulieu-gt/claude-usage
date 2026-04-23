@@ -182,7 +182,7 @@ JSONL file at --path
 | `Edit`, `Write`, `NotebookEdit` | `edit` | ✅ | `Edited <path>` (or `Created <path>` when implementer can distinguish; `Edited` is safe default) |
 | `Bash`, `PowerShell` | `bash` | ✅ | `` Ran `<command — whitespace-collapsed, truncated to 80 chars>` `` |
 | `Agent` | `agent_dispatch` | ✅ | `Dispatched <subagent_type> sub-agent` |
-| `mcp__*` (MCP tools) | `mcp` | ✅ | `` Called `<namespace.method>` (MCP) `` (strip `mcp__plugin_<plugin>_<server>__` prefix; dot-separate remainder) |
+| `mcp__*` (MCP tools) | `mcp` | ✅ | `` Called `<server>.<method>` (MCP) `` — see "MCP tool name normalization" below |
 | `WebFetch` | — | ❌ skip | Info-gathering — not state-changing |
 | `WebSearch` | — | ❌ skip | Info-gathering — not state-changing |
 | `Skill` | — | ❌ skip | Enabler, not action — the resulting Edits/Bash/Agent dispatches are the actual work |
@@ -192,6 +192,35 @@ JSONL file at --path
 | Anything else (unknown tool name) | `other` | ✅ | `Used <tool_name> tool` — default-include for forward compatibility |
 
 **Rule:** include only state-changing tools. Skip info-gathering, skill loading, and internal ceremony.
+
+### MCP tool name normalization
+
+MCP tool names appear in transcripts in two forms:
+
+- **Plugin-scoped:** `mcp__plugin_<plugin>_<server>__<method>` — e.g. `mcp__plugin_github_github__create_issue`, `mcp__plugin_context7_context7__query-docs`.
+- **Direct:** `mcp__<server>__<method>` — e.g. `mcp__github__create_issue`, `mcp__azure__storage`.
+
+Both forms normalize to `<server>.<method>` via:
+
+1. Strip the leading `mcp__`.
+2. If the remainder begins with `plugin_`, drop through the next underscore-separated segment (i.e. remove `plugin_<plugin>_`). Otherwise leave the remainder alone.
+3. Replace the final `__` (the separator between server and method) with `.`.
+
+Examples:
+
+| Raw tool name | Normalized summary target |
+|---|---|
+| `mcp__plugin_github_github__create_issue` | `github.create_issue` |
+| `mcp__plugin_context7_context7__query-docs` | `context7.query-docs` |
+| `mcp__github__create_issue` | `github.create_issue` |
+| `mcp__azure__storage` | `azure.storage` |
+
+Rendered summary string: `` Called `<normalized>` (MCP) ``.
+
+**Edge cases:**
+
+- A name that starts with `mcp__plugin_` but contains no further `__` separator (malformed) → treat as "other"-class action with template `Used <raw_tool_name> tool` rather than raising. Forward-compat safety.
+- Collapse key uses the normalized `<server>.<method>` string as the `target`, so two consecutive calls to the same MCP method (regardless of which form appeared in the raw name) collapse into one action.
 
 ### Collapse rule
 
@@ -301,10 +330,12 @@ Not a consumer contract — developer-only.
 |---|---|---|
 | `0` | Success — JSON written to stdout | *(silent)* |
 | `1` | Any pre-parse IO failure against `--path`, specifically: (a) file does not exist, (b) permission denied, (c) path exists but is a directory or special file, (d) disk/network read error before or during the read, or (e) any other `OSError` subclass raised by `open()` or iteration | `session-summary: cannot read transcript at '<path>': <OS error class>: <message>` |
-| `2` | Transcript parsed successfully but contains zero entries with `type: "user"` AND `userType: "external"` (e.g. transcript consists only of agent-setting / attachment / system entries, or the file is effectively empty after JSONL parse) | `session-summary: transcript '<path>' contains no user turns` |
-| `3` | File readable but contains no valid JSONL — every non-blank line fails `json.loads` | `session-summary: transcript '<path>' is not valid JSONL` |
+| `2` | Transcript was readable but contains zero entries with `type: "user"` AND `userType: "external"`. Covers three sub-cases: (a) transcript parsed successfully with only agent-setting / attachment / system entries and no user turns; (b) file is zero bytes; (c) file contains only blank / whitespace-only lines. In all three, the producer has no user-intent signal to summarize — empty file is treated as "empty session," not as "malformed." | `session-summary: transcript '<path>' contains no user turns` |
+| `3` | File contains **at least one non-blank line** but every such line fails `json.loads`. Exit 3 requires the file to have content that was *attempted* to parse as JSON and failed. Zero-byte and whitespace-only files fall under exit 2, not exit 3. | `session-summary: transcript '<path>' is not valid JSONL` |
 
-**Partial-malformed tolerance:** individual lines failing `json.loads` are skipped silently. Exit 3 fires only when **zero** lines parse. Matches existing `parser.py` line-skip behavior.
+**Partial-malformed tolerance:** individual lines failing `json.loads` are skipped silently. Exit 3 fires only when the file has ≥1 non-blank line AND **zero** of those lines parse. Matches existing `parser.py` line-skip behavior.
+
+**Why empty → exit 2 (not exit 3):** an empty (or whitespace-only) file parses vacuously — there are no bytes to reject as non-JSON. Semantically the file is "readable but contains no session" — the same category as an all-system-entries transcript. Exit 3 is reserved for the distinct failure mode of "bytes are present but are not JSONL."
 
 ### stdout/stderr discipline
 
