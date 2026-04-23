@@ -218,7 +218,7 @@ and resolves Open Question #2 from the spec.
 - Create: `claude_usage/cli/dashboard.py`
 - Modify: `claude_usage/__main__.py` (temporary intermediate state)
 
-- [ ] **Step 1: Create `claude_usage/cli/__init__.py`.**
+- [x] **Step 1: Create `claude_usage/cli/__init__.py`.**
 
   Exact file contents:
 
@@ -228,7 +228,7 @@ and resolves Open Question #2 from the spec.
 
   That is the entire file — one docstring line, nothing else.
 
-- [ ] **Step 2: Create `claude_usage/cli/dashboard.py`.**
+- [x] **Step 2: Create `claude_usage/cli/dashboard.py`.**
 
   Move the body of `__main__.py`'s `main()` function into a new `run(args)` function. Preserve all
   imports and helper functions. The helper functions `_parse_window` and `_parse_date` move into
@@ -453,7 +453,7 @@ and resolves Open Question #2 from the spec.
       return 0
   ```
 
-- [ ] **Step 3: Run existing tests to confirm nothing is broken.**
+- [x] **Step 3: Run existing tests to confirm nothing is broken.**
 
   ```bash
   uv run pytest -x
@@ -462,7 +462,7 @@ and resolves Open Question #2 from the spec.
   Expected: all tests pass. The old `main()` in `__main__.py` is still present (import surface
   intact); the new `cli/dashboard.py` is now importable but not yet wired to anything.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
   ```bash
   git add claude_usage/cli/__init__.py claude_usage/cli/dashboard.py
