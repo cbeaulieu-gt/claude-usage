@@ -4379,7 +4379,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
   Add to `tests/test_session_summary.py` (inside `class TestErrorPaths` or at
   module level — implementer chooses; be consistent):
@@ -4425,7 +4425,7 @@ where `K` is the count of dropped entries — is appended. Setting
           )
   ```
 
-- [ ] **Step 2: Run → confirm it fails.**
+- [x] **Step 2: Run → confirm it fails.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestErrorPaths::test_missing_file_exits_1 -v
@@ -4434,7 +4434,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected failure reason: `session-summary` subcommand does not exist yet, or
   `run()` raises `NotImplementedError`. Either way the exit code is not 1.
 
-- [ ] **Step 3: Implement `read_transcript` + partial `run`.**
+- [x] **Step 3: Implement `read_transcript` + partial `run`.**
 
   In `claude_usage/cli/session_summary.py`, add the following helper and wire it
   into a partial `run`. The function returns a tuple so Task 4.3 can extend it
@@ -4544,7 +4544,7 @@ where `K` is the count of dropped entries — is appended. Setting
   ss_parser.set_defaults(func=ss_mod.run)
   ```
 
-- [ ] **Step 4: Run → confirm the test passes.**
+- [x] **Step 4: Run → confirm the test passes.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestErrorPaths::test_missing_file_exits_1 -v
@@ -4553,7 +4553,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: PASSED. The `OSError` from opening a nonexistent path propagates
   up through `read_transcript`, is caught, and the function returns exit code 1.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

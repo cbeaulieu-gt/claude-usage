@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 import json as _json
+import subprocess
+import sys
 from pathlib import Path as _Path
 
 import pytest
@@ -1254,4 +1256,40 @@ class TestMaxActionsCap:
         # No sentinel — every element is a real action string.
         assert not any(
             a.startswith("… (") for a in summary.actions
+        )
+
+
+class TestErrorPaths:
+    """Tests for non-zero exit codes and stdout/stderr discipline."""
+
+    def test_missing_file_exits_1(self, tmp_path) -> None:
+        """Exit 1 when --path points to a non-existent file.
+
+        Asserts:
+          - Exit code is EXIT_IO_FAILURE (1).
+          - stdout is empty (no partial output).
+          - stderr contains the expected message fragments.
+        """
+        nonexistent = tmp_path / "nonexistent.jsonl"
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(nonexistent),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert "cannot read transcript at" in result.stderr
+        assert str(nonexistent) in result.stderr
+        # stderr should name one of the OSError subclass names
+        assert any(
+            name in result.stderr
+            for name in (
+                "FileNotFoundError",
+                "OSError",
+                "No such file or directory",
+            )
         )

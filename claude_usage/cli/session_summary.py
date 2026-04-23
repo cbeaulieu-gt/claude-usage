@@ -14,7 +14,9 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -518,6 +520,47 @@ def _apply_max_actions_cap(
     return [*kept, sentinel]
 
 
+def read_transcript(
+    path: Path,
+) -> tuple[list[dict], int]:
+    """Read and parse a JSONL transcript file.
+
+    Opens *path*, iterates its lines, skips blanks, silently skips
+    individual lines that fail ``json.loads``, and returns the
+    successfully parsed entries together with the total non-blank
+    line count.
+
+    The non-blank count is used by ``run`` to distinguish an
+    empty/whitespace-only file (exit 2) from a file that has content
+    but none of it parses (exit 3).
+
+    Args:
+        path: Absolute or relative path to the JSONL transcript file.
+
+    Returns:
+        A 2-tuple ``(entries, non_blank_lines)`` where *entries* is
+        the list of successfully parsed dicts and *non_blank_lines*
+        is the count of non-empty, non-whitespace lines seen.
+
+    Raises:
+        OSError: Any subclass raised by ``open()`` or line iteration
+            (``FileNotFoundError``, ``PermissionError``, etc.).
+    """
+    entries: list[dict] = []
+    non_blank_lines = 0
+    with path.open(encoding="utf-8") as fh:
+        for raw in fh:
+            stripped = raw.strip()
+            if not stripped:
+                continue
+            non_blank_lines += 1
+            try:
+                entries.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                pass  # tolerate individual-line failures
+    return entries, non_blank_lines
+
+
 def build_session_summary(
     entries: list[dict],
     *,
@@ -640,19 +683,35 @@ def build_parser(
 
 
 def run(args: argparse.Namespace) -> int:
-    """Execute the session-summary subcommand.
+    """Entry point for the session-summary subcommand.
+
+    Dispatches ``--path`` through the full parse → summarise → render
+    pipeline, printing JSON (or text) to stdout on success and a
+    single diagnostic line to stderr on failure.
 
     Args:
-        args: Parsed argument namespace from the session-summary subparser.
+        args: Parsed CLI namespace.  Expected attributes:
+            ``args.path`` (str), ``args.output_format`` (str),
+            ``args.max_actions`` (int).
 
     Returns:
-        Integer exit code (EXIT_OK, EXIT_IO_FAILURE, EXIT_NO_USER_TURNS,
-        or EXIT_NOT_JSONL).
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
+        Integer exit code (one of ``EXIT_OK``, ``EXIT_IO_FAILURE``,
+        ``EXIT_NO_USER_TURNS``, ``EXIT_NOT_JSONL``).
     """
+    path = Path(args.path)
+
+    # ── Phase 4.1: IO failure ────────────────────────────────────────
+    try:
+        entries, non_blank_lines = read_transcript(path)
+    except OSError as exc:
+        print(
+            f"session-summary: cannot read transcript at '{path}': "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_IO_FAILURE
+
+    # Remaining logic lands in Tasks 4.2, 4.3, 4.4.
     raise NotImplementedError(
-        "session-summary is not yet implemented. "
-        "Full implementation arrives in Phase 3."
+        "remaining logic lands in Tasks 4.2, 4.3, 4.4"
     )
