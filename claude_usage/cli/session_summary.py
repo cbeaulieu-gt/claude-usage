@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from pathlib import Path
 
 EXIT_OK = 0
 EXIT_IO_FAILURE = 1
@@ -86,9 +87,24 @@ def _derive_project(entries: list[dict], slug_fallback: str | None = None) -> st
     Returns:
         A non-empty project name string.
     """
-    # Stub — returns hardcoded value matching happy_path fixture.
-    # Replaced by real logic in Task 3.2.
-    return "claude-usage"
+    from claude_usage.parser import decode_project_hash
+
+    # Strategy 1: cwd field on any entry.
+    for entry in entries:
+        cwd = entry.get("cwd")
+        if cwd and isinstance(cwd, str):
+            name = Path(cwd).name
+            if name:
+                return name
+
+    # Strategy 2: decode the project-hash slug supplied by the caller.
+    if slug_fallback:
+        decoded = decode_project_hash(slug_fallback)
+        if decoded:
+            return decoded
+
+    # Strategy 3: final fallback.
+    return "unknown"
 
 
 def _derive_intent(entries: list[dict], project: str) -> str:

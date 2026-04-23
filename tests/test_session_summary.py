@@ -111,3 +111,56 @@ class TestBuildSessionSummary:
         assert isinstance(summary.actions, list)
         assert len(summary.actions) > 0
         assert summary.stopped_naturally is True
+
+    def test_project_derived_from_cwd_field(self) -> None:
+        """project is the basename of the cwd field on the first entry
+        that has one.
+
+        The happy_path fixture has cwd="/home/user/claude-usage" so the
+        derived project name must be "claude-usage".
+        """
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/happy_path.jsonl"
+        )
+        summary = build_session_summary(
+            _parse_fixture(fixture),
+            project_slug_fallback=fixture.parent.name,
+        )
+        assert summary.project == "claude-usage"
+
+    def test_project_falls_back_to_unknown(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """When no cwd is present and the path slug is not decodable,
+        project falls back to "unknown".
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        # Fixture with no cwd field anywhere and a non-project-hash path.
+        fixture = tmp_path / "no_cwd.jsonl"
+        fixture.write_text(
+            json.dumps({
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": "Hello with no cwd.",
+                },
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-nocwd",
+                "userType": "external",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        # Pass None as slug_fallback to exercise the final "unknown" path.
+        summary = build_session_summary(
+            _parse_fixture(fixture),
+            project_slug_fallback=None,
+        )
+        assert summary.project == "unknown"

@@ -1784,7 +1784,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add two failing tests.**
+- [x] **Step 1: Add two failing tests.**
 
   Add to `TestBuildSessionSummary` in `tests/test_session_summary.py`:
 
@@ -1844,7 +1844,7 @@ step. No placeholders.
           assert summary.project == "unknown"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestBuildSessionSummary::test_project_falls_back_to_unknown -x
@@ -1855,7 +1855,7 @@ step. No placeholders.
   test may pass accidentally via the stub; confirm by temporarily removing the
   stub's hardcoded return and verifying it then fails before restoring.
 
-- [ ] **Step 3: Implement `_derive_project` with real logic.**
+- [x] **Step 3: Implement `_derive_project` with real logic.**
 
   Replace the stub body of `_derive_project` in `claude_usage/cli/session_summary.py`:
 
@@ -1900,7 +1900,7 @@ step. No placeholders.
       return "unknown"
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -1908,7 +1908,7 @@ step. No placeholders.
 
   Expected: all tests pass, including both new project-derivation tests.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
