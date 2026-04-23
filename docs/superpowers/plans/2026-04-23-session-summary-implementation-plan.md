@@ -48,7 +48,7 @@ JSON key mapping: `stopped_naturally` (Python) → `stoppedNaturally` (JSON outp
 
 | Name | Signature |
 |---|---|
-| `build_session_summary` | `(path: Path, max_actions: int = 50) -> SessionSummary` |
+| `build_session_summary` | `(entries: list[dict], *, project_slug_fallback: str \| None = None, max_actions: int = DEFAULT_MAX_ACTIONS) -> SessionSummary` |
 | `render_json` | `(summary: SessionSummary) -> str` |
 | `render_text` | `(summary: SessionSummary) -> str` |
 
@@ -1272,25 +1272,29 @@ and resolves Open Question #2 from the spec.
 
 
   def build_session_summary(
-      path: Path,
+      entries: list[dict],
+      *,
+      project_slug_fallback: str | None = None,
       max_actions: int = DEFAULT_MAX_ACTIONS,
   ) -> SessionSummary:
-      """Derive a SessionSummary by walking a transcript JSONL file once.
+      """Build a SessionSummary from already-parsed transcript entries.
+
+      Pure function — no I/O. The caller (run()) is responsible for reading
+      the file and parsing JSONL; this function only classifies, derives,
+      and renders.
 
       Args:
-          path: Absolute or relative path to the JSONL transcript file.
-          max_actions: Soft cap on the number of emitted action strings.
-              When 0, the cap is disabled and all actions are emitted.
+          entries: Parsed JSONL entries (already filtered for successfully
+              decoded objects).
+          project_slug_fallback: Optional transcript-directory slug passed
+              through to `_derive_project` for the `decode_project_hash`
+              fallback when no `cwd` field appears on any entry.
+          max_actions: Soft cap on emitted actions; 0 disables the cap.
 
       Returns:
-          A fully populated SessionSummary instance.
+          Fully-populated SessionSummary.
 
       Raises:
-          OSError: If the file cannot be opened or read.
-          ValueError: If the file has content but contains no parseable
-              JSONL lines (caller should map to EXIT_NOT_JSONL).
-          LookupError: If the transcript contains no external user turns
-              (caller should map to EXIT_NO_USER_TURNS).
           NotImplementedError: Temporarily, until Phase 3 fills this in.
       """
       raise NotImplementedError("build_session_summary — implemented in Phase 3")
@@ -1497,9 +1501,40 @@ step. No placeholders.
 
 - [ ] **Step 1: Write `test_happy_path_emits_contract` — confirm it fails.**
 
-  Add this test class to `tests/test_session_summary.py`:
+  Add this test class to `tests/test_session_summary.py` (also add the
+  `_parse_fixture` helper at the top of the file, before any test class,
+  so all subsequent Phase 3 tests can reuse it):
 
   ```python
+  import json as _json
+  from pathlib import Path as _Path
+
+
+  def _parse_fixture(fixture_path: _Path) -> list[dict]:
+      """Read and parse a JSONL fixture into a list of dicts.
+
+      Skips blank lines and lines that fail json.loads, matching the
+      same tolerance as read_transcript in session_summary.py.
+
+      Args:
+          fixture_path: Path to a JSONL fixture file.
+
+      Returns:
+          List of successfully parsed entry dicts in file order.
+      """
+      entries: list[dict] = []
+      with fixture_path.open(encoding="utf-8") as fh:
+          for raw in fh:
+              stripped = raw.strip()
+              if not stripped:
+                  continue
+              try:
+                  entries.append(_json.loads(stripped))
+              except _json.JSONDecodeError:
+                  pass
+      return entries
+
+
   class TestBuildSessionSummary:
       """Tests for build_session_summary and the full derivation pipeline."""
 
@@ -1520,7 +1555,11 @@ step. No placeholders.
           fixture = Path(
               "tests/fixtures/session_summaries/happy_path.jsonl"
           )
-          summary = build_session_summary(fixture)
+          entries = _parse_fixture(fixture)
+          summary = build_session_summary(
+              entries,
+              project_slug_fallback=fixture.parent.name,
+          )
 
           assert summary.project == "claude-usage"
           assert "session-summary" in summary.intent.lower()
@@ -1552,55 +1591,20 @@ step. No placeholders.
   import sys
 
 
-  def _load_entries(path: Path) -> list[dict]:
-      """Read and parse all JSONL entries from a transcript file.
-
-      Blank lines are skipped. Lines that fail json.loads are skipped
-      silently (partial-malformed tolerance). Raises OSError on IO
-      failure and ValueError when the file has content but zero lines
-      parse successfully.
-
-      Args:
-          path: Path to the JSONL file to read.
-
-      Returns:
-          List of parsed entry dicts in file order.
-
-      Raises:
-          OSError: If the file cannot be opened or read.
-          ValueError: If the file has >=1 non-blank line but none parse.
-      """
-      entries: list[dict] = []
-      non_blank_count = 0
-      with open(path, encoding="utf-8") as fh:
-          for raw in fh:
-              line = raw.strip()
-              if not line:
-                  continue
-              non_blank_count += 1
-              try:
-                  entries.append(json.loads(line))
-              except json.JSONDecodeError:
-                  continue
-      if non_blank_count > 0 and not entries:
-          raise ValueError(
-              f"No parseable JSONL lines found in {path}"
-          )
-      return entries
-
-
-  def _derive_project(entries: list[dict], path: Path) -> str:
+  def _derive_project(entries: list[dict], slug_fallback: str | None = None) -> str:
       """Derive the project name from transcript entries.
 
       Strategy:
       1. First entry with a non-empty ``cwd`` field → ``Path(cwd).name``.
-      2. Fallback: apply ``decode_project_hash`` to the grandparent
-         directory name (the project slug in ~/.claude/projects/<slug>/).
+      2. Fallback: apply ``decode_project_hash`` to ``slug_fallback``
+         (the transcript-directory name passed in by ``run()``).
       3. Final fallback: ``"unknown"``.
 
       Args:
           entries: Parsed JSONL entries in file order.
-          path: Path to the transcript file (used for slug fallback).
+          slug_fallback: Optional project-slug string from the transcript
+              directory name, used when no ``cwd`` field appears on any
+              entry.
 
       Returns:
           A non-empty project name string.
@@ -1708,40 +1712,29 @@ step. No placeholders.
 
 
   def build_session_summary(
-      path: Path,
+      entries: list[dict],
+      *,
+      project_slug_fallback: str | None = None,
       max_actions: int = DEFAULT_MAX_ACTIONS,
   ) -> SessionSummary:
-      """Derive a SessionSummary by walking a transcript JSONL file once.
+      """Build a SessionSummary from already-parsed transcript entries.
+
+      Pure function — no I/O. The caller (run()) is responsible for reading
+      the file and parsing JSONL; this function only classifies, derives,
+      and renders.
 
       Args:
-          path: Absolute or relative path to the JSONL transcript file.
-          max_actions: Soft cap on the number of emitted action strings.
-              When 0, the cap is disabled and all actions are emitted.
+          entries: Parsed JSONL entries (already filtered for successfully
+              decoded objects).
+          project_slug_fallback: Optional transcript-directory slug passed
+              through to ``_derive_project`` for the ``decode_project_hash``
+              fallback when no ``cwd`` field appears on any entry.
+          max_actions: Soft cap on emitted actions; 0 disables the cap.
 
       Returns:
-          A fully populated SessionSummary instance.
-
-      Raises:
-          OSError: If the file cannot be opened or read.
-          ValueError: If the file has content but contains no parseable
-              JSONL lines (caller should map to EXIT_NOT_JSONL).
-          LookupError: If the transcript contains no external user turns
-              (caller should map to EXIT_NO_USER_TURNS).
+          Fully-populated SessionSummary.
       """
-      entries = _load_entries(path)
-
-      # Check for zero external user turns.
-      has_user_turn = any(
-          e.get("type") == "user"
-          and e.get("userType") == "external"
-          for e in entries
-      )
-      if not has_user_turn:
-          raise LookupError(
-              f"Transcript '{path}' contains no external user turns"
-          )
-
-      project = _derive_project(entries, path)
+      project = _derive_project(entries, project_slug_fallback)
       intent = _derive_intent(entries, project)
       records = _collect_tool_uses(entries)
       stopped_naturally = _derive_stopped_naturally(entries)
@@ -1810,7 +1803,10 @@ step. No placeholders.
           fixture = Path(
               "tests/fixtures/session_summaries/happy_path.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(
+              _parse_fixture(fixture),
+              project_slug_fallback=fixture.parent.name,
+          )
           assert summary.project == "claude-usage"
 
       def test_project_falls_back_to_unknown(
@@ -1840,7 +1836,11 @@ step. No placeholders.
               }) + "\n",
               encoding="utf-8",
           )
-          summary = build_session_summary(fixture)
+          # Pass None as slug_fallback to exercise the final "unknown" path.
+          summary = build_session_summary(
+              _parse_fixture(fixture),
+              project_slug_fallback=None,
+          )
           assert summary.project == "unknown"
   ```
 
@@ -1860,19 +1860,22 @@ step. No placeholders.
   Replace the stub body of `_derive_project` in `claude_usage/cli/session_summary.py`:
 
   ```python
-  def _derive_project(entries: list[dict], path: Path) -> str:
+  def _derive_project(
+      entries: list[dict],
+      slug_fallback: str | None = None,
+  ) -> str:
       """Derive the project name from transcript entries.
 
       Strategy:
       1. First entry with a non-empty ``cwd`` field → ``Path(cwd).name``.
-      2. Fallback: apply ``decode_project_hash`` to the grandparent
-         directory of the transcript path (the project slug directory
-         under ~/.claude/projects/<slug>/<session>.jsonl).
+      2. Fallback: apply ``decode_project_hash`` to ``slug_fallback``
+         (the transcript-directory name supplied by ``run()``).
       3. Final fallback: ``"unknown"``.
 
       Args:
           entries: Parsed JSONL entries in file order.
-          path: Path to the transcript file (used for slug fallback).
+          slug_fallback: Optional project-slug string (the parent-directory
+              name of the transcript file, as extracted by ``run()``).
 
       Returns:
           A non-empty project name string.
@@ -1887,12 +1890,11 @@ step. No placeholders.
               if name:
                   return name
 
-      # Strategy 2: decode the project-hash slug from the path.
-      # Expected layout: .../.claude/projects/<slug>/<session>.jsonl
-      slug = path.parent.name
-      decoded = decode_project_hash(slug)
-      if decoded:
-          return decoded
+      # Strategy 2: decode the project-hash slug supplied by the caller.
+      if slug_fallback:
+          decoded = decode_project_hash(slug_fallback)
+          if decoded:
+              return decoded
 
       # Strategy 3: final fallback.
       return "unknown"
@@ -1962,7 +1964,7 @@ step. No placeholders.
               }) + "\n",
               encoding="utf-8",
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.intent == "Implement the login feature"
 
       def test_intent_strips_system_reminder_wrapper(
@@ -1991,7 +1993,7 @@ step. No placeholders.
               }) + "\n",
               encoding="utf-8",
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.intent == "Fix the parser bug in parser.py"
 
       def test_intent_falls_back_for_slash_command_only(self) -> None:
@@ -2003,7 +2005,7 @@ step. No placeholders.
           fixture = Path(
               "tests/fixtures/session_summaries/slash_command_only.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.intent == "Ran /project-review"
 
       def test_intent_empty_session_fallback(
@@ -2030,7 +2032,7 @@ step. No placeholders.
               }) + "\n",
               encoding="utf-8",
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.intent == "Session on myproject"
   ```
 
@@ -2292,7 +2294,7 @@ step. No placeholders.
           ]
           fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
 
           assert len(summary.actions) == 3
           assert summary.actions[0] == "Edited src/a.py"
@@ -2363,7 +2365,7 @@ step. No placeholders.
           fixture = tmp_path / "skip_tools.jsonl"
           fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.actions == []
   ```
 
@@ -2647,7 +2649,7 @@ step. No placeholders.
           fixture = tmp_path / "bash_tools.jsonl"
           fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
 
           assert len(summary.actions) == 3
 
@@ -2712,7 +2714,7 @@ step. No placeholders.
               ]) + "\n",
               encoding="utf-8",
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert len(summary.actions) == 1
           assert summary.actions[0] == "Dispatched code-reviewer sub-agent"
   ```
@@ -3461,7 +3463,7 @@ Edit.
           fixture = tmp_path / "skip_mix.jsonl"
           fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert len(summary.actions) == 1
           assert summary.actions[0] == "Edited src/result.py"
   ```
@@ -3786,7 +3788,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
               "tests/fixtures/session_summaries/"
               "consecutive_edits_same_file.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
 
           assert len(summary.actions) == 1
           assert summary.actions[0] == "Edited claude_usage/parser.py"
@@ -3858,7 +3860,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
           fixture = tmp_path / "non_adjacent.jsonl"
           fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
 
           # All three edits must be present — none collapsed.
           assert len(summary.actions) == 3
@@ -3965,7 +3967,7 @@ resolution-table rows that produce deterministic outcomes.
           fixture = Path(
               "tests/fixtures/session_summaries/happy_path.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.stopped_naturally is True
 
       def test_stopped_naturally_false_on_max_tokens(self) -> None:
@@ -3977,7 +3979,7 @@ resolution-table rows that produce deterministic outcomes.
           fixture = Path(
               "tests/fixtures/session_summaries/max_tokens_stop.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.stopped_naturally is False
 
       def test_stopped_naturally_false_on_prevented_continuation(self) -> None:
@@ -3989,7 +3991,7 @@ resolution-table rows that produce deterministic outcomes.
           fixture = Path(
               "tests/fixtures/session_summaries/prevented_continuation.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.stopped_naturally is False
 
       def test_stopped_naturally_null_on_no_assistant_turns(self) -> None:
@@ -4001,7 +4003,7 @@ resolution-table rows that produce deterministic outcomes.
           fixture = Path(
               "tests/fixtures/session_summaries/no_assistant_entries.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.stopped_naturally is None
 
       def test_stopped_naturally_null_on_missing_stop_reason(self) -> None:
@@ -4013,7 +4015,7 @@ resolution-table rows that produce deterministic outcomes.
           fixture = Path(
               "tests/fixtures/session_summaries/missing_stop_reason.jsonl"
           )
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
           assert summary.stopped_naturally is None
   ```
 
@@ -4186,7 +4188,7 @@ where `K` is the count of dropped entries — is appended. Setting
               "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
           )
           # Default max_actions == 50.
-          summary = build_session_summary(fixture)
+          summary = build_session_summary(_parse_fixture(fixture))
 
           assert len(summary.actions) == 50
           assert summary.actions[-1].startswith("… (")
@@ -4201,7 +4203,7 @@ where `K` is the count of dropped entries — is appended. Setting
           fixture = Path(
               "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
           )
-          summary = build_session_summary(fixture, max_actions=5)
+          summary = build_session_summary(_parse_fixture(fixture), max_actions=5)
 
           assert len(summary.actions) == 5
           assert summary.actions[-1].startswith("… (")
@@ -4219,7 +4221,7 @@ where `K` is the count of dropped entries — is appended. Setting
           fixture = Path(
               "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
           )
-          summary = build_session_summary(fixture, max_actions=0)
+          summary = build_session_summary(_parse_fixture(fixture), max_actions=0)
 
           assert len(summary.actions) == 55
           # No sentinel — every element is a real action string.
@@ -4300,7 +4302,7 @@ where `K` is the count of dropped entries — is appended. Setting
   `build_session_summary` becomes:
 
   ```python
-      project = _derive_project(entries, path)
+      project = _derive_project(entries, project_slug_fallback)
       intent = _derive_intent(entries, project)
       records = _collect_tool_uses(entries)
       stopped_naturally = _derive_stopped_naturally(entries)
@@ -4436,7 +4438,8 @@ where `K` is the count of dropped entries — is appended. Setting
 
   In `claude_usage/cli/session_summary.py`, add the following helper and wire it
   into a partial `run`. The function returns a tuple so Task 4.3 can extend it
-  without changing the call site.
+  without changing the call site. `run()` becomes the **single I/O site** —
+  `build_session_summary` receives already-parsed `entries` and does no file I/O.
 
   ```python
   from __future__ import annotations
@@ -5091,10 +5094,7 @@ where `K` is the count of dropped entries — is appended. Setting
           return EXIT_NO_USER_TURNS
 
       # ── Success path (exit 0) ────────────────────────────────────────
-      summary = build_session_summary(path, max_actions=args.max_actions)
-
       # Non-fatal warning: malformed lines were skipped.
-      # Re-derive the count from read_transcript (already called above).
       skipped = non_blank_lines - len(entries)
       if skipped > 0:
           print(
@@ -5102,6 +5102,15 @@ where `K` is the count of dropped entries — is appended. Setting
               f" in '{path}'",
               file=sys.stderr,
           )
+
+      # run() is the single I/O site. Pass already-parsed entries so
+      # build_session_summary performs no file I/O.
+      slug = path.parent.name if path.parent.name else None
+      summary = build_session_summary(
+          entries,
+          project_slug_fallback=slug,
+          max_actions=args.max_actions,
+      )
 
       if args.format == "json":
           output = render_json(summary)
@@ -5112,12 +5121,6 @@ where `K` is the count of dropped entries — is appended. Setting
       print(output, flush=True)
       return EXIT_OK
   ```
-
-  > **Implementation note:** `build_session_summary` re-opens the file
-  > internally (as built in Phase 3). This double-read is intentional: keeping
-  > the validate-then-summarise separation clean is worth the negligible extra
-  > IO cost on transcript-sized files. If performance becomes a concern, a
-  > refactor can pass `entries` directly — that is a Task 0 non-goal for now.
 
 - [ ] **Step 4: Run → both new tests pass; run the full test file.**
 
@@ -5858,7 +5861,7 @@ cross-reference table at the top of the plan:
 |---|---|---|---|
 | `ActionRecord` | Yes — `dataclass(frozen=True)` with `type`, `raw_tool`, `target`, `summary` | Tasks 3.3, 3.7, 3.8, 3.9 | Consistent |
 | `SessionSummary` | Yes — `dataclass(frozen=True)` with `project`, `intent`, `actions`, `stopped_naturally` | Tasks 3.1, 3.4–3.12, 4.4, 5.1, 5.2 | Consistent |
-| `build_session_summary` | `(path: Path, max_actions: int = 50) -> SessionSummary` | Task 3.1 (stub), 3.12 (final body), 4.4 (called in run) | Consistent |
+| `build_session_summary` | `(entries: list[dict], *, project_slug_fallback: str \| None = None, max_actions: int = DEFAULT_MAX_ACTIONS) -> SessionSummary` | Task 3.1 (stub), 3.12 (final body), 4.4 (called in run — single I/O site) | Consistent |
 | `render_json` | `(summary: SessionSummary) -> str` | Tasks 4.4, 5.1 | Consistent |
 | `render_text` | `(summary: SessionSummary) -> str` | Tasks 4.4 (stub), 5.2 (impl) | Consistent |
 | `run` | `(args: argparse.Namespace) -> int` | Tasks 4.1–4.4 | Consistent |
@@ -5884,3 +5887,16 @@ All three checks pass:
 3. **Type/name consistency: clean.** Ten identifiers (public + private)
    checked; all are consistent across their declaring task and every
    subsequent task that references them.
+
+---
+
+> **Post-plan signature refactor:** `build_session_summary` now takes
+> pre-parsed `entries: list[dict]` rather than `path: Path`.
+> `run()` is the single I/O site via `read_transcript`. This eliminates
+> a double-open that would have shipped with the v1 implementation —
+> `read_transcript` was already called in `run()` for the exit-2/exit-3
+> validation checks, so `build_session_summary` would have silently
+> re-opened and re-parsed the same file on the success path. The refactored
+> shape keeps I/O concerns in `run()` and makes `build_session_summary` a
+> pure function suitable for direct unit-testing without touching the
+> filesystem (tests now use `_parse_fixture` instead of passing a file path).
