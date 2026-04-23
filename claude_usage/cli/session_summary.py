@@ -26,6 +26,8 @@ EXIT_NOT_JSONL = 3
 DEFAULT_MAX_ACTIONS: int = 50
 
 _EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "NotebookEdit"})
+_BASH_TOOLS: frozenset[str] = frozenset({"Bash", "PowerShell"})
+_MAX_COMMAND_CHARS: int = 80
 _SKIP_TOOLS: frozenset[str] = frozenset({
     "Read", "Grep", "Glob",
     "WebFetch", "WebSearch",
@@ -251,8 +253,31 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
             summary=f"Edited {target}",
         )
 
-    # Bash / PowerShell — implemented in Task 3.5.
-    # Agent — implemented in Task 3.5.
+    # Bash / PowerShell.
+    if name in _BASH_TOOLS:
+        raw_command: str = inp.get("command", "")
+        collapsed_command = " ".join(raw_command.split())
+        if len(collapsed_command) > _MAX_COMMAND_CHARS:
+            rendered = collapsed_command[:_MAX_COMMAND_CHARS] + "…"
+        else:
+            rendered = collapsed_command
+        return ActionRecord(
+            type="bash",
+            raw_tool=name,
+            target=collapsed_command,
+            summary=f"Ran `{rendered}`",
+        )
+
+    # Agent dispatch.
+    if name == "Agent":
+        subagent_type: str = inp.get("subagent_type", "unknown")
+        return ActionRecord(
+            type="agent_dispatch",
+            raw_tool=name,
+            target=subagent_type,
+            summary=f"Dispatched {subagent_type} sub-agent",
+        )
+
     # MCP — implemented in Task 3.6 (next pass).
 
     # Placeholder for not-yet-classified tools: skip rather than

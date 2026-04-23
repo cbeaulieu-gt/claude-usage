@@ -425,3 +425,181 @@ class TestToolClassification:
 
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.actions == []
+
+    def test_action_classification_bash_tools(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Bash and PowerShell tool uses produce 'bash' ActionRecords.
+
+        Three cases:
+        (a) Short command renders fully in summary.
+        (b) Command > 80 chars (after whitespace-collapse) is truncated
+            with a unicode ellipsis suffix.
+        (c) PowerShell tool name maps to the same "bash" action type.
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        short_cmd = "uv run pytest -x"
+        long_cmd = (
+            "uv run pytest tests/ --tb=short --no-header "
+            "-q --disable-warnings --timeout=60 "
+            "tests/test_session_summary.py tests/test_cli_subcommands.py "
+            "tests/test_dashboard_snapshot.py"
+        )
+        # Whitespace-collapsed long_cmd will exceed 80 chars.
+        ps_cmd = "Get-ChildItem -Recurse *.py"
+
+        lines = [
+            json.dumps({
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": "Run some bash commands.",
+                },
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-bash",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }),
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": "Bash",
+                        "input": {
+                            "command": short_cmd,
+                            "description": "Run tests",
+                        },
+                    }],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 30, "output_tokens": 10,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "a-001",
+                "timestamp": "2026-04-20T09:00:01.000Z",
+                "sessionId": "sess-bash",
+            }),
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "tu-002",
+                        "name": "Bash",
+                        "input": {
+                            "command": long_cmd,
+                            "description": "Run many tests",
+                        },
+                    }],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 30, "output_tokens": 10,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "a-002",
+                "timestamp": "2026-04-20T09:00:02.000Z",
+                "sessionId": "sess-bash",
+            }),
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "tu-003",
+                        "name": "PowerShell",
+                        "input": {
+                            "command": ps_cmd,
+                        },
+                    }],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 30, "output_tokens": 10,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "a-003",
+                "timestamp": "2026-04-20T09:00:03.000Z",
+                "sessionId": "sess-bash",
+            }),
+        ]
+        fixture = tmp_path / "bash_tools.jsonl"
+        fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        summary = build_session_summary(_parse_fixture(fixture))
+
+        assert len(summary.actions) == 3
+
+        # (a) Short command — no truncation.
+        assert summary.actions[0] == f"Ran `{short_cmd}`"
+
+        # (b) Long command — truncated at 80 chars with ellipsis.
+        collapsed = " ".join(long_cmd.split())
+        expected_long = f"Ran `{collapsed[:80]}…`"
+        assert summary.actions[1] == expected_long
+
+        # (c) PowerShell uses same "bash" type.
+        assert summary.actions[2] == f"Ran `{ps_cmd}`"
+
+    def test_action_classification_agent_dispatch(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Agent tool use produces an 'agent_dispatch' ActionRecord."""
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = tmp_path / "agent_dispatch.jsonl"
+        fixture.write_text(
+            "\n".join([
+                json.dumps({
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": "Review the code.",
+                    },
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-agent",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }),
+                json.dumps({
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{
+                            "type": "tool_use",
+                            "id": "tu-001",
+                            "name": "Agent",
+                            "input": {
+                                "subagent_type": "code-reviewer",
+                                "description": "Review session_summary.py",
+                            },
+                        }],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "end_turn",
+                        "usage": {"input_tokens": 40, "output_tokens": 15,
+                                  "cache_creation_input_tokens": 0,
+                                  "cache_read_input_tokens": 0},
+                    },
+                    "uuid": "a-001",
+                    "timestamp": "2026-04-20T09:00:01.000Z",
+                    "sessionId": "sess-agent",
+                }),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert len(summary.actions) == 1
+        assert summary.actions[0] == "Dispatched code-reviewer sub-agent"

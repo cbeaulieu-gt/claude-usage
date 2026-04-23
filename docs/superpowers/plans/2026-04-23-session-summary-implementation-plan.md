@@ -2533,7 +2533,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_bash_tools` — confirm it fails.**
+- [x] **Step 1: Add `test_action_classification_bash_tools` — confirm it fails.**
 
   Add to `TestToolClassification` in `tests/test_session_summary.py`:
 
@@ -2719,7 +2719,7 @@ step. No placeholders.
           assert summary.actions[0] == "Dispatched code-reviewer sub-agent"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification::test_action_classification_bash_tools tests/test_session_summary.py::TestToolClassification::test_action_classification_agent_dispatch -x
@@ -2728,7 +2728,7 @@ step. No placeholders.
   Expected: both tests fail because Bash, PowerShell, and Agent return `None`
   in the current `_classify_tool_use`.
 
-- [ ] **Step 3: Extend `_classify_tool_use` to handle Bash, PowerShell, and Agent.**
+- [x] **Step 3: Extend `_classify_tool_use` to handle Bash, PowerShell, and Agent.**
 
   Replace the Bash/PowerShell and Agent placeholder comments in
   `_classify_tool_use` with real dispatch blocks. Show the updated function
@@ -2769,7 +2769,7 @@ step. No placeholders.
           )
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2779,7 +2779,7 @@ step. No placeholders.
   real Bash and Agent classification in addition to Edit, so
   `len(summary.actions) > 0` remains trivially satisfied.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
