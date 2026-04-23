@@ -222,6 +222,54 @@ def _derive_intent(entries: list[dict], project: str) -> str:
     return f"Session on {project}"
 
 
+def _normalize_mcp_tool_name(raw: str) -> str | None:
+    """Normalize an MCP tool name to '<server>.<method>'.
+
+    Handles both forms:
+    - Plugin-scoped: ``mcp__plugin_<plugin>_<server>__<method>``
+      e.g. ``mcp__plugin_github_github__create_issue`` → ``github.create_issue``
+    - Direct: ``mcp__<server>__<method>``
+      e.g. ``mcp__azure__storage`` → ``azure.storage``
+
+    Returns None when the name is malformed (starts with ``mcp__`` but
+    does not contain the expected structural separators after stripping
+    the plugin segment), so the caller can fall back to the ``other``
+    action class. This provides forward-compatibility when new MCP naming
+    conventions appear in future Claude Code versions.
+
+    Args:
+        raw: The raw tool name from the transcript.
+
+    Returns:
+        A normalised ``<server>.<method>`` string, or None if the name
+        is structurally malformed.
+    """
+    if not raw.startswith("mcp__"):
+        return None
+    remainder = raw[len("mcp__"):]
+
+    # Strip the plugin segment if present.
+    # Plugin form: plugin_<plugin>_<server>__<method>
+    # After stripping "plugin_", the next segment is "<plugin>_<server>"
+    # which is separated from <method> by "__".
+    if remainder.startswith("plugin_"):
+        after_plugin = remainder[len("plugin_"):]
+        # after_plugin is "<plugin>_<server>__<method>" — split once on "_"
+        # to skip the plugin label, leaving "<server>__<method>".
+        parts = after_plugin.split("_", 1)
+        if len(parts) < 2:
+            return None  # Malformed: nothing after plugin label.
+        remainder = parts[1]
+
+    # remainder is now "<server>__<method>" for both forms.
+    if "__" not in remainder:
+        return None  # Malformed: no method separator.
+    server, _, method = remainder.partition("__")
+    if not server or not method:
+        return None  # Malformed: empty server or method.
+    return f"{server}.{method}"
+
+
 def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
     """Classify a single tool-use content block into an ActionRecord.
 
@@ -278,12 +326,27 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
             summary=f"Dispatched {subagent_type} sub-agent",
         )
 
-    # MCP — implemented in Task 3.6 (next pass).
+    # MCP tools — both plugin-scoped and direct forms.
+    if name.startswith("mcp__"):
+        normalised = _normalize_mcp_tool_name(name)
+        if normalised is not None:
+            return ActionRecord(
+                type="mcp",
+                raw_tool=name,
+                target=normalised,
+                summary=f"Called `{normalised}` (MCP)",
+            )
+        # Malformed MCP name — fall through to the "other" default below.
+        # Do NOT return None here; let the catch-all produce an ActionRecord.
+        return ActionRecord(
+            type="other",
+            raw_tool=name,
+            target=name,
+            summary=f"Used {name} tool",
+        )
 
-    # Placeholder for not-yet-classified tools: skip rather than
-    # produce "other" until later tasks fill them in. Once Task 3.6
-    # is complete this branch will handle the "other" catch-all.
-    return None
+    # "other" default — implemented in Task 3.9.
+    return None   # temporary; replaced in Task 3.9
 
 
 def _collapse_consecutive(

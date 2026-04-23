@@ -2969,7 +2969,7 @@ name (prefix present but structural separators absent) falls through to the
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add four tests to `TestToolClassification`.**
+- [x] **Step 1: Add four tests to `TestToolClassification`.**
 
   ```python
       def test_action_classification_mcp_plugin_scoped(
@@ -3190,7 +3190,7 @@ name (prefix present but structural separators absent) falls through to the
           assert records[0].target == "github.create_issue"
   ```
 
-- [ ] **Step 2: Run → confirm all four tests fail.**
+- [x] **Step 2: Run → confirm all four tests fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification \
@@ -3201,7 +3201,7 @@ name (prefix present but structural separators absent) falls through to the
   currently falls through to `return None` for any `mcp__*` name — the MCP
   branch does not yet exist.
 
-- [ ] **Step 3: Implement `_normalize_mcp_tool_name` and the MCP dispatch
+- [x] **Step 3: Implement `_normalize_mcp_tool_name` and the MCP dispatch
   branch.**
 
   Add the helper function at module level in `claude_usage/cli/session_summary.py`,
@@ -3300,7 +3300,7 @@ name (prefix present but structural separators absent) falls through to the
   > catch-all in Task 3.9 will never be reached for an `mcp__*` name. This
   > is intentional and matches the spec's forward-compat requirement.
 
-- [ ] **Step 4: Run → confirm all four MCP tests pass.**
+- [x] **Step 4: Run → confirm all four MCP tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3309,7 +3309,7 @@ name (prefix present but structural separators absent) falls through to the
   Expected: all tests pass including all four new MCP tests. Existing tests
   are unaffected.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

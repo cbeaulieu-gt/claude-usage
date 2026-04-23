@@ -656,3 +656,212 @@ class TestToolClassification:
             target="code-writer",
             summary="Dispatched code-writer sub-agent",
         )
+
+    def test_action_classification_mcp_plugin_scoped(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Plugin-scoped MCP name normalizes to 'github.create_issue'.
+
+        Raw: mcp__plugin_github_github__create_issue
+        Expected target: "github.create_issue"
+        Expected summary: "Called `github.create_issue` (MCP)"
+        """
+        from claude_usage.cli.session_summary import (
+            ActionRecord,
+            _collect_tool_uses,
+        )
+
+        raw_name = "mcp__plugin_github_github__create_issue"
+        entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-001",
+                    "name": raw_name,
+                    "input": {"title": "Test issue", "body": "body"},
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 60,
+                    "output_tokens": 20,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-001",
+            "timestamp": "2026-04-20T09:00:01.000Z",
+            "sessionId": "sess-mcp",
+        }
+        records = _collect_tool_uses([entry])
+
+        assert len(records) == 1
+        assert records[0] == ActionRecord(
+            type="mcp",
+            raw_tool=raw_name,
+            target="github.create_issue",
+            summary="Called `github.create_issue` (MCP)",
+        )
+
+    def test_action_classification_mcp_direct(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Direct MCP name normalizes to 'azure.storage'.
+
+        Raw: mcp__azure__storage
+        Expected target: "azure.storage"
+        Expected summary: "Called `azure.storage` (MCP)"
+        """
+        from claude_usage.cli.session_summary import (
+            ActionRecord,
+            _collect_tool_uses,
+        )
+
+        raw_name = "mcp__azure__storage"
+        entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-001",
+                    "name": raw_name,
+                    "input": {"container": "my-bucket"},
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 40,
+                    "output_tokens": 10,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-001",
+            "timestamp": "2026-04-20T09:00:01.000Z",
+            "sessionId": "sess-mcp-direct",
+        }
+        records = _collect_tool_uses([entry])
+
+        assert len(records) == 1
+        assert records[0] == ActionRecord(
+            type="mcp",
+            raw_tool=raw_name,
+            target="azure.storage",
+            summary="Called `azure.storage` (MCP)",
+        )
+
+    def test_action_classification_mcp_malformed_falls_back_to_other(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Malformed MCP name (no second __ separator) falls back to 'other'.
+
+        Raw: mcp__plugin_broken
+        The name starts with 'mcp__' and 'plugin_' but has no '__' after
+        the plugin segment, so normalization returns None. The forward-compat
+        fallback produces an 'other'-type ActionRecord.
+        """
+        from claude_usage.cli.session_summary import (
+            ActionRecord,
+            _collect_tool_uses,
+        )
+
+        raw_name = "mcp__plugin_broken"
+        entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-001",
+                    "name": raw_name,
+                    "input": {},
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-001",
+            "timestamp": "2026-04-20T09:00:01.000Z",
+            "sessionId": "sess-mcp-bad",
+        }
+        records = _collect_tool_uses([entry])
+
+        assert len(records) == 1
+        assert records[0] == ActionRecord(
+            type="other",
+            raw_tool=raw_name,
+            target=raw_name,
+            summary=f"Used {raw_name} tool",
+        )
+
+    def test_action_classification_mcp_collapse_unifies_forms(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Plugin-scoped and direct MCP forms for the same endpoint normalize
+        to an identical target string, so consecutive occurrences collapse.
+
+        Two consecutive tool uses — one plugin-scoped, one direct — both
+        resolve to target "github.create_issue". After _collect_tool_uses
+        (which includes collapse), only one ActionRecord is returned.
+        """
+        from claude_usage.cli.session_summary import _collect_tool_uses
+
+        plugin_entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-001",
+                    "name": "mcp__plugin_github_github__create_issue",
+                    "input": {"title": "First", "body": "b1"},
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 60,
+                    "output_tokens": 20,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-001",
+            "timestamp": "2026-04-20T09:00:01.000Z",
+            "sessionId": "sess-mcp-collapse",
+        }
+        direct_entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-002",
+                    "name": "mcp__github__create_issue",
+                    "input": {"title": "Second", "body": "b2"},
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 65,
+                    "output_tokens": 20,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-002",
+            "timestamp": "2026-04-20T09:00:02.000Z",
+            "sessionId": "sess-mcp-collapse",
+        }
+        records = _collect_tool_uses([plugin_entry, direct_entry])
+
+        # Both normalize to the same target → collapse reduces to one.
+        assert len(records) == 1
+        assert records[0].target == "github.create_issue"
