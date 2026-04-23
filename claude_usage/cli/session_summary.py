@@ -711,6 +711,18 @@ def run(args: argparse.Namespace) -> int:
         )
         return EXIT_IO_FAILURE
 
+    # ── Phase 4.3: not JSONL ─────────────────────────────────────────
+    # Condition: file had parseable-attempt content (non_blank_lines > 0)
+    # but zero entries survived json.loads.
+    # NOTE: non_blank_lines == 0 means empty/whitespace-only → fall
+    # through to the no-user-turns check (exit 2), not here.
+    if not entries and non_blank_lines > 0:
+        print(
+            f"session-summary: transcript '{path}' is not valid JSONL",
+            file=sys.stderr,
+        )
+        return EXIT_NOT_JSONL
+
     # ── Phase 4.2: no user turns ─────────────────────────────────────
     has_user_turns = any(
         entry.get("type") == "user"
@@ -724,7 +736,5 @@ def run(args: argparse.Namespace) -> int:
         )
         return EXIT_NO_USER_TURNS
 
-    # Remaining logic lands in Tasks 4.3, 4.4.
-    raise NotImplementedError(
-        "remaining logic lands in Tasks 4.3, 4.4"
-    )
+    # Remaining logic lands in Task 4.4.
+    raise NotImplementedError("remaining logic lands in Task 4.4")

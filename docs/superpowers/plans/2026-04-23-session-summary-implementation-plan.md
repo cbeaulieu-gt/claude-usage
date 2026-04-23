@@ -4737,7 +4737,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
   ```python
   class TestExitNotJsonl:
@@ -4788,7 +4788,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert result.returncode == 2
   ```
 
-- [ ] **Step 2: Run → confirm both tests fail.**
+- [x] **Step 2: Run → confirm both tests fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestExitNotJsonl -v
@@ -4798,7 +4798,7 @@ where `K` is the count of dropped entries — is appended. Setting
   `NotImplementedError` (not code 3); `test_empty_is_not_exit_3` may already
   pass (exit 2 is wired), but confirm.
 
-- [ ] **Step 3: Add the exit-3 branch to `run`.**
+- [x] **Step 3: Add the exit-3 branch to `run`.**
 
   The `read_transcript` signature already returns `non_blank_lines`. Insert the
   exit-3 check between the IO catch and the exit-2 check. The critical ordering
@@ -4855,7 +4855,7 @@ where `K` is the count of dropped entries — is appended. Setting
   This matches the spec's explicit amendment: "Zero-byte and whitespace-only
   files fall under exit 2, not exit 3."
 
-- [ ] **Step 4: Run → both new tests pass; re-run full test class suite.**
+- [x] **Step 4: Run → both new tests pass; re-run full test class suite.**
 
   ```bash
   uv run pytest \
@@ -4868,7 +4868,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: all six tests PASSED. Specifically confirm `test_empty_is_not_exit_3`
   exits 2 and `test_zero_byte_file_exits_2` still exits 2.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

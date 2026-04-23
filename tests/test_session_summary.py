@@ -1318,6 +1318,54 @@ class TestExitNoUserTurns:
         assert "contains no user turns" in result.stderr
 
 
+class TestExitNotJsonl:
+    """Exit 3 when the file has content but none parses as JSONL."""
+
+    def test_malformed_file_exits_3(self, tmp_path: pytest.fixture) -> None:
+        """File with non-blank, non-JSON lines → exit 3.
+
+        This is distinct from exit 2: bytes are present, attempted,
+        and rejected — not an empty/whitespace file.
+        """
+        malformed = tmp_path / "all_malformed.jsonl"
+        malformed.write_text(
+            "this is not json\n"
+            "{also not json\n"
+            "definitely: not: json: either\n"
+        )
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(malformed),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3
+        assert result.stdout == ""
+        assert "is not valid JSONL" in result.stderr
+
+    def test_empty_is_not_exit_3(self, tmp_path: pytest.fixture) -> None:
+        """Zero-byte file must exit 2, not 3 — spec requirement.
+
+        Exit 3 requires at least one non-blank line that was attempted.
+        """
+        empty = tmp_path / "empty.jsonl"
+        empty.write_text("")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(empty),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        # Must be 2, not 3.
+        assert result.returncode == 2
+
+
 class TestErrorPaths:
     """Tests for non-zero exit codes and stdout/stderr discipline."""
 
