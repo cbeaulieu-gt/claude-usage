@@ -4158,7 +4158,7 @@ where `K` is the count of dropped entries — is appended. Setting
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add three tests to a new `TestMaxActionsCap` class.**
+- [x] **Step 1: Add three tests to a new `TestMaxActionsCap` class.**
 
   The `over_fifty_actions.jsonl` fixture from Phase 2 contains 55 assistant
   entries each with a distinct `Edit` target (`src/file_001.py` …
@@ -4230,7 +4230,7 @@ where `K` is the count of dropped entries — is appended. Setting
           )
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestMaxActionsCap -v
@@ -4253,7 +4253,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: 56 lines (1 user entry + 55 assistant entries). If fewer, the
   Phase 2 fixture must be regenerated.
 
-- [ ] **Step 3: Implement `_apply_max_actions_cap` (standalone function) and
+- [x] **Step 3: Implement `_apply_max_actions_cap` (standalone function) and
   wire it into `build_session_summary`.**
 
   The Task 3.1 stub named this function `_apply_max_actions_cap` but had it
@@ -4321,7 +4321,7 @@ where `K` is the count of dropped entries — is appended. Setting
       )
   ```
 
-- [ ] **Step 4: Run → confirm all three tests pass.**
+- [x] **Step 4: Run → confirm all three tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestMaxActionsCap -v
@@ -4337,7 +4337,7 @@ where `K` is the count of dropped entries — is appended. Setting
   `list[str]` does not break any earlier tests because the function was only
   called from `build_session_summary`.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

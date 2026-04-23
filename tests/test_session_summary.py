@@ -1196,3 +1196,62 @@ class TestStoppedNaturally:
         )
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.stopped_naturally is None
+
+
+class TestMaxActionsCap:
+    """Tests for _apply_max_actions_cap sentinel truncation."""
+
+    def test_actions_truncated_at_default_cap(self) -> None:
+        """Fixture with 55 distinct actions truncates to 50 at default cap.
+
+        The last element must be the sentinel string matching the pattern
+        '… (<K> additional actions omitted)' where K == 55 - 49 == 6.
+        """
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
+        )
+        # Default max_actions == 50.
+        summary = build_session_summary(_parse_fixture(fixture))
+
+        assert len(summary.actions) == 50
+        assert summary.actions[-1].startswith("… (")
+        assert summary.actions[-1].endswith("additional actions omitted)")
+
+    def test_actions_respects_max_actions_override(self) -> None:
+        """max_actions=5 keeps 4 real actions plus the sentinel."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture), max_actions=5)
+
+        assert len(summary.actions) == 5
+        assert summary.actions[-1].startswith("… (")
+        assert summary.actions[-1].endswith("additional actions omitted)")
+        # Sentinel must count the correct number of dropped actions.
+        # 55 total, kept 4 = 49 + 1 sentinel → dropped = 55 - 4 = 51.
+        assert "51" in summary.actions[-1]
+
+    def test_actions_cap_zero_disables_truncation(self) -> None:
+        """max_actions=0 disables the cap — all 55 actions are returned."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture), max_actions=0)
+
+        assert len(summary.actions) == 55
+        # No sentinel — every element is a real action string.
+        assert not any(
+            a.startswith("… (") for a in summary.actions
+        )

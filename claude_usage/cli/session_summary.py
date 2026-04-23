@@ -490,29 +490,32 @@ def _derive_stopped_naturally(
 
 
 def _apply_max_actions_cap(
-    records: list[ActionRecord],
+    actions: list[str],
     max_actions: int,
 ) -> list[str]:
-    """Convert ActionRecords to summary strings, applying the cap.
+    """Apply the --max-actions cap with sentinel truncation.
 
-    When max_actions > 0 and len(records) > max_actions, keep the first
-    max_actions - 1 records and append a sentinel string describing how
-    many were omitted.
+    When ``max_actions`` is 0, the cap is disabled and the full list is
+    returned. Otherwise, if ``len(actions) > max_actions``, keep the
+    first ``max_actions - 1`` entries and append a sentinel string of
+    the form ``'… (<K> additional actions omitted)'`` where ``K`` is the
+    number of dropped entries.
 
     Args:
-        records: Classified, collapsed ActionRecord list.
+        actions: Already-rendered past-tense action strings.
         max_actions: Cap value. 0 means no cap.
 
     Returns:
-        List of past-tense action strings, bounded by the cap.
+        The (possibly truncated) list of action strings.
     """
-    summaries = [r.summary for r in records]
-    if max_actions == 0 or len(summaries) <= max_actions:
-        return summaries
-    kept = summaries[: max_actions - 1]
-    dropped = len(summaries) - (max_actions - 1)
-    kept.append(f"… ({dropped} additional actions omitted)")
-    return kept
+    if max_actions <= 0:
+        return list(actions)
+    if len(actions) <= max_actions:
+        return list(actions)
+    kept = actions[: max_actions - 1]
+    dropped = len(actions) - (max_actions - 1)
+    sentinel = f"… ({dropped} additional actions omitted)"
+    return [*kept, sentinel]
 
 
 def build_session_summary(
@@ -542,7 +545,12 @@ def build_session_summary(
     intent = _derive_intent(entries, project)
     records = _collect_tool_uses(entries)
     stopped_naturally = _derive_stopped_naturally(entries)
-    action_strings = _apply_max_actions_cap(records, max_actions)
+
+    # Render ActionRecords to strings, then apply the cap.
+    action_strings_full = [r.summary for r in records]
+    action_strings = _apply_max_actions_cap(
+        action_strings_full, max_actions
+    )
 
     return SessionSummary(
         project=project,
