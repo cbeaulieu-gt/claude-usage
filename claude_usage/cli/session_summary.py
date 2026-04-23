@@ -429,19 +429,64 @@ def _collect_tool_uses(entries: list[dict]) -> list[ActionRecord]:
 def _derive_stopped_naturally(
     entries: list[dict],
 ) -> bool | None:
-    """Determine whether the session ended naturally.
+    """Resolve the tri-state stoppedNaturally field per the spec's table.
+
+    Walks entries once, tracking:
+    - ``has_any_assistant``: True once any assistant entry is seen.
+    - ``last_stop_reason``: Updated on every assistant entry; last wins.
+    - ``prevented_continuation``: True if any stop_hook_summary entry
+      has ``preventedContinuation: true``.
+
+    Resolution table (applied in priority order):
+    - no assistant entries → None (nothing to judge)
+    - last stop_reason absent/empty → None (signal absent)
+    - prevented_continuation is True → False (definitive interrupt)
+    - last stop_reason == "end_turn" → True
+    - last stop_reason in {"max_tokens", "tool_use", "stop_sequence"} → False
+    - any other non-empty stop_reason → None (unknown variant; don't guess)
+
+    Callers emit None as JSON null so consumers can distinguish
+    'unknown' from 'interrupted'.
 
     Args:
         entries: Parsed JSONL entries in file order.
 
     Returns:
-        True if last assistant stop_reason == "end_turn" and no
-        prevented-continuation marker was seen. False on a definitive
-        interrupt signal. None when the signal is indeterminate.
+        True for a clean natural end, False for a definitive interrupt
+        signal, or None when the signal is genuinely indeterminate.
     """
-    # Stub — returns True matching happy_path fixture.
-    # Replaced by real logic in Task 3.7 (next pass).
-    return True
+    has_any_assistant: bool = False
+    last_stop_reason: str | None = None
+    prevented_continuation: bool = False
+
+    for entry in entries:
+        etype = entry.get("type")
+
+        if etype == "assistant":
+            has_any_assistant = True
+            message = entry.get("message") or {}
+            reason = message.get("stop_reason")
+            # Update on every assistant entry — last one wins.
+            last_stop_reason = reason if reason else None
+
+        elif etype == "system":
+            if entry.get("subtype") == "stop_hook_summary":
+                if entry.get("preventedContinuation") is True:
+                    prevented_continuation = True
+
+    # Resolution table — applied in priority order.
+    if not has_any_assistant:
+        return None
+    if last_stop_reason is None:
+        return None
+    if prevented_continuation:
+        return False
+    if last_stop_reason == "end_turn":
+        return True
+    if last_stop_reason in ("max_tokens", "tool_use", "stop_sequence"):
+        return False
+    # Unknown non-empty stop_reason — don't guess.
+    return None
 
 
 def _apply_max_actions_cap(

@@ -1132,3 +1132,67 @@ class TestCollapseConsecutive:
         assert summary.actions[0] == "Edited src/a.py"
         assert summary.actions[1] == "Edited src/b.py"
         assert summary.actions[2] == "Edited src/a.py"
+
+
+class TestStoppedNaturally:
+    """Tests for _derive_stopped_naturally tri-state resolution."""
+
+    def test_stopped_naturally_true_on_end_turn(self) -> None:
+        """stop_reason 'end_turn' with no prevented-continuation → True."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/happy_path.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.stopped_naturally is True
+
+    def test_stopped_naturally_false_on_max_tokens(self) -> None:
+        """stop_reason 'max_tokens' → False (definitive interrupt)."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/max_tokens_stop.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.stopped_naturally is False
+
+    def test_stopped_naturally_false_on_prevented_continuation(self) -> None:
+        """preventedContinuation: true in stop_hook_summary → False."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/prevented_continuation.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.stopped_naturally is False
+
+    def test_stopped_naturally_null_on_no_assistant_turns(self) -> None:
+        """Zero assistant entries → None (nothing to judge)."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/no_assistant_entries.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.stopped_naturally is None
+
+    def test_stopped_naturally_null_on_missing_stop_reason(self) -> None:
+        """Last assistant entry has no stop_reason key → None (signal absent)."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/missing_stop_reason.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.stopped_naturally is None

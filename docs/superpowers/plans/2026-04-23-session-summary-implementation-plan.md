@@ -3952,7 +3952,7 @@ resolution-table rows that produce deterministic outcomes.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add five tests to a new `TestStoppedNaturally` class.**
+- [x] **Step 1: Add five tests to a new `TestStoppedNaturally` class.**
 
   ```python
   class TestStoppedNaturally:
@@ -4019,7 +4019,7 @@ resolution-table rows that produce deterministic outcomes.
           assert summary.stopped_naturally is None
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestStoppedNaturally -v
@@ -4030,7 +4030,7 @@ resolution-table rows that produce deterministic outcomes.
   `test_stopped_naturally_true_on_end_turn` test may pass accidentally through
   the stub; the other four will fail.
 
-- [ ] **Step 3: Implement `_derive_stopped_naturally` with real tri-state logic.**
+- [x] **Step 3: Implement `_derive_stopped_naturally` with real tri-state logic.**
 
   Replace the stub body in `claude_usage/cli/session_summary.py` with the
   full implementation. Show the complete function:
@@ -4108,7 +4108,7 @@ resolution-table rows that produce deterministic outcomes.
 
   No change to the call site is needed — only the function body changes.
 
-- [ ] **Step 4: Run → confirm all five tests pass.**
+- [x] **Step 4: Run → confirm all five tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestStoppedNaturally -v
@@ -4122,7 +4122,7 @@ resolution-table rows that produce deterministic outcomes.
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
