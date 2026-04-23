@@ -25,6 +25,13 @@ EXIT_NOT_JSONL = 3
 
 DEFAULT_MAX_ACTIONS: int = 50
 
+_EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "NotebookEdit"})
+_SKIP_TOOLS: frozenset[str] = frozenset({
+    "Read", "Grep", "Glob",
+    "WebFetch", "WebSearch",
+    "Skill", "TodoWrite",
+})
+
 _XML_WRAPPER_RE = re.compile(
     r"<(system-reminder|command-message|command-name"
     r"|command-args|local-command-stdout)>.*?</\1>",
@@ -213,40 +220,104 @@ def _derive_intent(entries: list[dict], project: str) -> str:
     return f"Session on {project}"
 
 
+def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
+    """Classify a single tool-use content block into an ActionRecord.
+
+    Returns None for tools that should be skipped (info-gathering,
+    skill enablers, ceremony). Returns an ActionRecord for all
+    state-changing tools. Unknown tool names produce an "other"-class
+    record for forward compatibility.
+
+    Args:
+        tool_use: A content block dict with ``type == "tool_use"``.
+
+    Returns:
+        An ActionRecord, or None if this tool use should be skipped.
+    """
+    name: str = tool_use.get("name", "")
+    inp: dict = tool_use.get("input", {})
+
+    # Skip list — info-gathering and ceremony.
+    if name in _SKIP_TOOLS:
+        return None
+
+    # Edit family.
+    if name in _EDIT_TOOLS:
+        target = inp.get("file_path", "")
+        return ActionRecord(
+            type="edit",
+            raw_tool=name,
+            target=target,
+            summary=f"Edited {target}",
+        )
+
+    # Bash / PowerShell — implemented in Task 3.5.
+    # Agent — implemented in Task 3.5.
+    # MCP — implemented in Task 3.6 (next pass).
+
+    # Placeholder for not-yet-classified tools: skip rather than
+    # produce "other" until later tasks fill them in. Once Task 3.6
+    # is complete this branch will handle the "other" catch-all.
+    return None
+
+
+def _collapse_consecutive(
+    records: list[ActionRecord],
+) -> list[ActionRecord]:
+    """Collapse consecutive ActionRecords that share (type, target).
+
+    Non-adjacent duplicates are NOT collapsed — chronological order
+    is preserved and the collapse is strictly sequential.
+
+    Args:
+        records: Chronologically ordered list of ActionRecords.
+
+    Returns:
+        Collapsed list with no two adjacent records sharing
+        (type, target).
+    """
+    if not records:
+        return []
+    collapsed: list[ActionRecord] = [records[0]]
+    for rec in records[1:]:
+        prev = collapsed[-1]
+        if rec.type == prev.type and rec.target == prev.target:
+            continue  # Duplicate of the previous record — drop it.
+        collapsed.append(rec)
+    return collapsed
+
+
 def _collect_tool_uses(entries: list[dict]) -> list[ActionRecord]:
     """Classify all tool-use content blocks from assistant entries.
+
+    Iterates entries in file order, collects tool_use blocks from
+    assistant message content, classifies each, skips None results,
+    then collapses consecutive duplicates.
 
     Args:
         entries: Parsed JSONL entries in file order.
 
     Returns:
-        Chronologically ordered list of ActionRecord instances, with
-        consecutive records sharing (type, target) collapsed to one.
+        Chronologically ordered, collapsed list of ActionRecord
+        instances.
     """
-    # Stub — returns hardcoded actions matching happy_path fixture.
-    # Replaced by real logic in Tasks 3.4–3.6.
-    return [
-        ActionRecord(
-            type="edit",
-            raw_tool="Edit",
-            target="claude_usage/cli/session_summary.py",
-            summary="Edited claude_usage/cli/session_summary.py",
-        ),
-        ActionRecord(
-            type="bash",
-            raw_tool="Bash",
-            target="uv run pytest tests/test_session_summary.py -x",
-            summary=(
-                "Ran `uv run pytest tests/test_session_summary.py -x`"
-            ),
-        ),
-        ActionRecord(
-            type="agent_dispatch",
-            raw_tool="Agent",
-            target="code-reviewer",
-            summary="Dispatched code-reviewer sub-agent",
-        ),
-    ]
+    raw: list[ActionRecord] = []
+    for entry in entries:
+        if entry.get("type") != "assistant":
+            continue
+        msg = entry.get("message", {})
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "tool_use":
+                continue
+            record = _classify_tool_use(block)
+            if record is not None:
+                raw.append(record)
+    return _collapse_consecutive(raw)
 
 
 def _derive_stopped_naturally(

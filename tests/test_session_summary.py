@@ -258,3 +258,170 @@ class TestBuildSessionSummary:
         )
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.intent == "Session on myproject"
+
+
+class TestToolClassification:
+    """Tests for _classify_tool_use and _collect_tool_uses."""
+
+    def test_action_classification_edit_tools(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Edit, Write, and NotebookEdit each produce an 'edit' ActionRecord.
+
+        Each tool-use block should produce:
+        - type == "edit"
+        - raw_tool == the original tool name
+        - target == the file_path input value
+        - summary starting with "Edited "
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        def _make_tool_use(
+            uid: str, name: str, path: str
+        ) -> dict:
+            return {
+                "type": "tool_use",
+                "id": uid,
+                "name": name,
+                "input": {"file_path": path, "old_string": "a", "new_string": "b"},
+            }
+
+        fixture = tmp_path / "edit_tools.jsonl"
+        lines = [
+            json.dumps({
+                "type": "user",
+                "message": {"role": "user", "content": "Edit three files."},
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-edit",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }),
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        _make_tool_use("tu-001", "Edit", "src/a.py"),
+                    ],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 50, "output_tokens": 10,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "a-001",
+                "timestamp": "2026-04-20T09:00:01.000Z",
+                "sessionId": "sess-edit",
+            }),
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        _make_tool_use("tu-002", "Write", "src/b.py"),
+                    ],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 50, "output_tokens": 10,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "a-002",
+                "timestamp": "2026-04-20T09:00:02.000Z",
+                "sessionId": "sess-edit",
+            }),
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        _make_tool_use("tu-003", "NotebookEdit", "notebook.ipynb"),
+                    ],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 50, "output_tokens": 10,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "a-003",
+                "timestamp": "2026-04-20T09:00:03.000Z",
+                "sessionId": "sess-edit",
+            }),
+        ]
+        fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        summary = build_session_summary(_parse_fixture(fixture))
+
+        assert len(summary.actions) == 3
+        assert summary.actions[0] == "Edited src/a.py"
+        assert summary.actions[1] == "Edited src/b.py"
+        assert summary.actions[2] == "Edited notebook.ipynb"
+
+    def test_action_classification_skips_reads(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Read, Grep, Glob, WebFetch, WebSearch, Skill, and TodoWrite
+        tool uses are skipped — they are info-gathering or ceremony.
+
+        Result: actions list is empty.
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        skip_tools = [
+            ("Read", {"file_path": "foo.py"}),
+            ("Grep", {"pattern": "def ", "path": "."}),
+            ("Glob", {"pattern": "**/*.py"}),
+            ("WebFetch", {"url": "https://example.com"}),
+            ("WebSearch", {"query": "python"}),
+            ("Skill", {"skill": "python"}),
+            ("TodoWrite", {"todos": []}),
+        ]
+
+        lines = [
+            json.dumps({
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": "Look at things but do not change them.",
+                },
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-skip",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }),
+        ]
+        for i, (tool_name, inp) in enumerate(skip_tools, start=1):
+            lines.append(json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": f"tu-{i:03d}",
+                        "name": tool_name,
+                        "input": inp,
+                    }],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": (
+                        "tool_use" if i < len(skip_tools) else "end_turn"
+                    ),
+                    "usage": {"input_tokens": 20, "output_tokens": 5,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": f"a-{i:03d}",
+                "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
+                "sessionId": "sess-skip",
+            }))
+
+        fixture = tmp_path / "skip_tools.jsonl"
+        fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.actions == []
