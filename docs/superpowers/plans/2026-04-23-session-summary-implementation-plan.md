@@ -717,7 +717,7 @@ and resolves Open Question #2 from the spec.
 **Files:**
 - Create: `tests/test_dashboard_snapshot.py`
 
-- [ ] **Step 1: Write the snapshot regression test.**
+- [x] **Step 1: Write the snapshot regression test.**
 
   Create `tests/test_dashboard_snapshot.py`:
 
@@ -790,7 +790,7 @@ and resolves Open Question #2 from the spec.
       )
   ```
 
-- [ ] **Step 2: Run the test.**
+- [x] **Step 2: Run the test.**
 
   ```bash
   uv run pytest tests/test_dashboard_snapshot.py -v
@@ -799,7 +799,7 @@ and resolves Open Question #2 from the spec.
   Expected: `test_existing_dashboard_unchanged` passes. The refactor was a verbatim body move;
   dashboard behavior is unchanged.
 
-- [ ] **Step 3: Commit.**
+- [x] **Step 3: Commit.**
 
   ```bash
   git add tests/test_dashboard_snapshot.py
