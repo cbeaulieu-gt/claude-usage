@@ -1499,7 +1499,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Write `test_happy_path_emits_contract` — confirm it fails.**
+- [x] **Step 1: Write `test_happy_path_emits_contract` — confirm it fails.**
 
   Add this test class to `tests/test_session_summary.py` (also add the
   `_parse_fixture` helper at the top of the file, before any test class,
@@ -1568,7 +1568,7 @@ step. No placeholders.
           assert summary.stopped_naturally is True
   ```
 
-- [ ] **Step 2: Run → confirm failure.**
+- [x] **Step 2: Run → confirm failure.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestBuildSessionSummary::test_happy_path_emits_contract -x
@@ -1577,7 +1577,7 @@ step. No placeholders.
   Expected failure: `NotImplementedError` from the `build_session_summary`
   stub. This is the correct red state — not an import error.
 
-- [ ] **Step 3: Implement a minimal `build_session_summary` using internal stubs.**
+- [x] **Step 3: Implement a minimal `build_session_summary` using internal stubs.**
 
   Replace the `build_session_summary` stub in `claude_usage/cli/session_summary.py`
   with the following. The four private helpers (`_derive_project`,
@@ -1751,7 +1751,7 @@ step. No placeholders.
   Also add `import json` and `import sys` at the top of the file, in the
   stdlib imports block, after `import argparse` and before `from dataclasses`.
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -1759,7 +1759,7 @@ step. No placeholders.
 
   Expected: all existing tests plus `test_happy_path_emits_contract` pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -1784,7 +1784,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add two failing tests.**
+- [x] **Step 1: Add two failing tests.**
 
   Add to `TestBuildSessionSummary` in `tests/test_session_summary.py`:
 
@@ -1844,7 +1844,7 @@ step. No placeholders.
           assert summary.project == "unknown"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestBuildSessionSummary::test_project_falls_back_to_unknown -x
@@ -1855,7 +1855,7 @@ step. No placeholders.
   test may pass accidentally via the stub; confirm by temporarily removing the
   stub's hardcoded return and verifying it then fails before restoring.
 
-- [ ] **Step 3: Implement `_derive_project` with real logic.**
+- [x] **Step 3: Implement `_derive_project` with real logic.**
 
   Replace the stub body of `_derive_project` in `claude_usage/cli/session_summary.py`:
 
@@ -1900,7 +1900,7 @@ step. No placeholders.
       return "unknown"
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -1908,7 +1908,7 @@ step. No placeholders.
 
   Expected: all tests pass, including both new project-derivation tests.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -1933,7 +1933,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add four failing tests.**
+- [x] **Step 1: Add four failing tests.**
 
   Add to `TestBuildSessionSummary` in `tests/test_session_summary.py`:
 
@@ -2036,16 +2036,16 @@ step. No placeholders.
           assert summary.intent == "Session on myproject"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -k "intent" -x
   ```
 
   Expected: all four intent tests fail because `_derive_intent` returns a
-  hardcoded string.
+  hardcoded string. [confirmed: all 4 failed at red phase]
 
-- [ ] **Step 3: Implement `_derive_intent` with real logic.**
+- [x] **Step 3: Implement `_derive_intent` with real logic.**
 
   Replace the stub body of `_derive_intent` in `claude_usage/cli/session_summary.py`.
   Also add `import re` to the stdlib imports at the top of the file.
@@ -2162,7 +2162,7 @@ step. No placeholders.
       return f"Session on {project}"
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2170,7 +2170,7 @@ step. No placeholders.
 
   Expected: all tests pass, including all four new intent tests.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -2195,7 +2195,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_edit_tools` — confirm it fails.**
+- [x] **Step 1: Add `test_action_classification_edit_tools` — confirm it fails.**
 
   Add a new test class to `tests/test_session_summary.py`:
 
@@ -2369,7 +2369,7 @@ step. No placeholders.
           assert summary.actions == []
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification -x
@@ -2379,7 +2379,7 @@ step. No placeholders.
   because `_collect_tool_uses` returns the hardcoded happy-path list.
   `test_action_classification_skips_reads` fails for the same reason.
 
-- [ ] **Step 3: Implement `_classify_tool_use` and `_collect_tool_uses`.**
+- [x] **Step 3: Implement `_classify_tool_use` and `_collect_tool_uses`.**
 
   Replace the stub bodies of both functions in
   `claude_usage/cli/session_summary.py`. The edit family is handled fully.
@@ -2495,7 +2495,7 @@ step. No placeholders.
       return _collapse_consecutive(raw)
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2508,7 +2508,7 @@ step. No placeholders.
   assertion from `len(summary.actions) > 0` (already satisfied by one Edit)
   to confirm it still holds before committing.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -2533,7 +2533,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_bash_tools` — confirm it fails.**
+- [x] **Step 1: Add `test_action_classification_bash_tools` — confirm it fails.**
 
   Add to `TestToolClassification` in `tests/test_session_summary.py`:
 
@@ -2719,7 +2719,7 @@ step. No placeholders.
           assert summary.actions[0] == "Dispatched code-reviewer sub-agent"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification::test_action_classification_bash_tools tests/test_session_summary.py::TestToolClassification::test_action_classification_agent_dispatch -x
@@ -2728,7 +2728,7 @@ step. No placeholders.
   Expected: both tests fail because Bash, PowerShell, and Agent return `None`
   in the current `_classify_tool_use`.
 
-- [ ] **Step 3: Extend `_classify_tool_use` to handle Bash, PowerShell, and Agent.**
+- [x] **Step 3: Extend `_classify_tool_use` to handle Bash, PowerShell, and Agent.**
 
   Replace the Bash/PowerShell and Agent placeholder comments in
   `_classify_tool_use` with real dispatch blocks. Show the updated function
@@ -2769,7 +2769,7 @@ step. No placeholders.
           )
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2779,7 +2779,7 @@ step. No placeholders.
   real Bash and Agent classification in addition to Edit, so
   `len(summary.actions) > 0` remains trivially satisfied.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -2811,7 +2811,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Confirm `test_action_classification_agent_dispatch` exists and
+- [x] **Step 1: Confirm `test_action_classification_agent_dispatch` exists and
   check its fixture contract.**
 
   The test was written in Task 3.5 and lives in `TestToolClassification`. It
@@ -2879,7 +2879,7 @@ step. No placeholders.
       )
   ```
 
-- [ ] **Step 2: Run → confirm both agent tests pass (green from Task 3.5).**
+- [x] **Step 2: Run → confirm both agent tests pass (green from Task 3.5).**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification \
@@ -2890,7 +2890,7 @@ step. No placeholders.
   `test_action_classification_agent_dispatch_record_fields` pass. This is not
   a red step — it is a contract-verification step.
 
-- [ ] **Step 3: Confirm the dispatch branch in `_classify_tool_use`.**
+- [x] **Step 3: Confirm the dispatch branch in `_classify_tool_use`.**
 
   The Agent branch sits after the Bash/PowerShell block and before the final
   `return None`. For reference, the surrounding context in the function
@@ -2930,7 +2930,7 @@ step. No placeholders.
 
   No code change is needed here if Task 3.5 implemented the branch correctly.
 
-- [ ] **Step 4: Run full suite → confirm no regressions.**
+- [x] **Step 4: Run full suite → confirm no regressions.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2938,7 +2938,7 @@ step. No placeholders.
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -2969,7 +2969,7 @@ name (prefix present but structural separators absent) falls through to the
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add four tests to `TestToolClassification`.**
+- [x] **Step 1: Add four tests to `TestToolClassification`.**
 
   ```python
       def test_action_classification_mcp_plugin_scoped(
@@ -3190,7 +3190,7 @@ name (prefix present but structural separators absent) falls through to the
           assert records[0].target == "github.create_issue"
   ```
 
-- [ ] **Step 2: Run → confirm all four tests fail.**
+- [x] **Step 2: Run → confirm all four tests fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification \
@@ -3201,7 +3201,7 @@ name (prefix present but structural separators absent) falls through to the
   currently falls through to `return None` for any `mcp__*` name — the MCP
   branch does not yet exist.
 
-- [ ] **Step 3: Implement `_normalize_mcp_tool_name` and the MCP dispatch
+- [x] **Step 3: Implement `_normalize_mcp_tool_name` and the MCP dispatch
   branch.**
 
   Add the helper function at module level in `claude_usage/cli/session_summary.py`,
@@ -3300,7 +3300,7 @@ name (prefix present but structural separators absent) falls through to the
   > catch-all in Task 3.9 will never be reached for an `mcp__*` name. This
   > is intentional and matches the spec's forward-compat requirement.
 
-- [ ] **Step 4: Run → confirm all four MCP tests pass.**
+- [x] **Step 4: Run → confirm all four MCP tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3309,7 +3309,7 @@ name (prefix present but structural separators absent) falls through to the
   Expected: all tests pass including all four new MCP tests. Existing tests
   are unaffected.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -3346,7 +3346,7 @@ Edit.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_skip_set_is_complete` to
+- [x] **Step 1: Add `test_action_classification_skip_set_is_complete` to
   `TestToolClassification`.**
 
   ```python
@@ -3468,7 +3468,7 @@ Edit.
           assert summary.actions[0] == "Edited src/result.py"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification \
@@ -3480,7 +3480,7 @@ Edit.
   but not `SKIPPED_TOOLS` (public, no underscore). The mix test passes if the
   skip logic is correct from Task 3.4.
 
-- [ ] **Step 3: Rename the private constant to the public name and ensure it
+- [x] **Step 3: Rename the private constant to the public name and ensure it
   is exported.**
 
   In `claude_usage/cli/session_summary.py`, rename `_SKIP_TOOLS` to
@@ -3512,7 +3512,7 @@ Edit.
   })
   ```
 
-- [ ] **Step 4: Run → confirm all tests pass.**
+- [x] **Step 4: Run → confirm all tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3521,7 +3521,7 @@ Edit.
   Expected: all tests pass. `test_action_classification_skip_set_is_complete`
   now finds the public `SKIPPED_TOOLS` constant and the frozenset matches.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -3551,7 +3551,7 @@ introduces new tool names.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_unknown_tool_defaults_to_other`.**
+- [x] **Step 1: Add `test_action_classification_unknown_tool_defaults_to_other`.**
 
   ```python
       def test_action_classification_unknown_tool_defaults_to_other(
@@ -3608,7 +3608,7 @@ introduces new tool names.
           )
   ```
 
-- [ ] **Step 2: Run → confirm failure.**
+- [x] **Step 2: Run → confirm failure.**
 
   ```bash
   uv run pytest \
@@ -3620,7 +3620,7 @@ introduces new tool names.
   `"BrandNewTool"` because the temporary `return None` at the end of
   `_classify_tool_use` discards it.
 
-- [ ] **Step 3: Replace the temporary `return None` with the `other` catch-all.**
+- [x] **Step 3: Replace the temporary `return None` with the `other` catch-all.**
 
   In `claude_usage/cli/session_summary.py`, locate the line `return None` at
   the very end of `_classify_tool_use` (the one added as a placeholder in
@@ -3722,7 +3722,7 @@ introduces new tool names.
       )
   ```
 
-- [ ] **Step 4: Run → confirm all tests pass.**
+- [x] **Step 4: Run → confirm all tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3731,7 +3731,7 @@ introduces new tool names.
   Expected: all tests pass. The `other` catch-all now handles `"BrandNewTool"`
   and any future unknown tool names.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -3765,7 +3765,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add two tests — `test_consecutive_edits_collapse` and
+- [x] **Step 1: Add two tests — `test_consecutive_edits_collapse` and
   `test_non_adjacent_edits_do_not_collapse`.**
 
   ```python
@@ -3869,7 +3869,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
           assert summary.actions[2] == "Edited src/a.py"
   ```
 
-- [ ] **Step 2: Run → confirm both tests pass (green from Task 3.4).**
+- [x] **Step 2: Run → confirm both tests pass (green from Task 3.4).**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestCollapseConsecutive -v
@@ -3915,7 +3915,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
   Verify this is what `session_summary.py` contains. If it differs, correct
   it and re-run.
 
-- [ ] **Step 3: Run full suite → confirm no regressions.**
+- [x] **Step 3: Run full suite → confirm no regressions.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3923,7 +3923,7 @@ The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
 
   Expected: all tests pass.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -3952,7 +3952,7 @@ resolution-table rows that produce deterministic outcomes.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add five tests to a new `TestStoppedNaturally` class.**
+- [x] **Step 1: Add five tests to a new `TestStoppedNaturally` class.**
 
   ```python
   class TestStoppedNaturally:
@@ -4019,7 +4019,7 @@ resolution-table rows that produce deterministic outcomes.
           assert summary.stopped_naturally is None
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestStoppedNaturally -v
@@ -4030,7 +4030,7 @@ resolution-table rows that produce deterministic outcomes.
   `test_stopped_naturally_true_on_end_turn` test may pass accidentally through
   the stub; the other four will fail.
 
-- [ ] **Step 3: Implement `_derive_stopped_naturally` with real tri-state logic.**
+- [x] **Step 3: Implement `_derive_stopped_naturally` with real tri-state logic.**
 
   Replace the stub body in `claude_usage/cli/session_summary.py` with the
   full implementation. Show the complete function:
@@ -4108,7 +4108,7 @@ resolution-table rows that produce deterministic outcomes.
 
   No change to the call site is needed — only the function body changes.
 
-- [ ] **Step 4: Run → confirm all five tests pass.**
+- [x] **Step 4: Run → confirm all five tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestStoppedNaturally -v
@@ -4122,7 +4122,7 @@ resolution-table rows that produce deterministic outcomes.
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -4158,7 +4158,7 @@ where `K` is the count of dropped entries — is appended. Setting
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add three tests to a new `TestMaxActionsCap` class.**
+- [x] **Step 1: Add three tests to a new `TestMaxActionsCap` class.**
 
   The `over_fifty_actions.jsonl` fixture from Phase 2 contains 55 assistant
   entries each with a distinct `Edit` target (`src/file_001.py` …
@@ -4230,7 +4230,7 @@ where `K` is the count of dropped entries — is appended. Setting
           )
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestMaxActionsCap -v
@@ -4253,7 +4253,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: 56 lines (1 user entry + 55 assistant entries). If fewer, the
   Phase 2 fixture must be regenerated.
 
-- [ ] **Step 3: Implement `_apply_max_actions_cap` (standalone function) and
+- [x] **Step 3: Implement `_apply_max_actions_cap` (standalone function) and
   wire it into `build_session_summary`.**
 
   The Task 3.1 stub named this function `_apply_max_actions_cap` but had it
@@ -4321,7 +4321,7 @@ where `K` is the count of dropped entries — is appended. Setting
       )
   ```
 
-- [ ] **Step 4: Run → confirm all three tests pass.**
+- [x] **Step 4: Run → confirm all three tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestMaxActionsCap -v
@@ -4337,7 +4337,7 @@ where `K` is the count of dropped entries — is appended. Setting
   `list[str]` does not break any earlier tests because the function was only
   called from `build_session_summary`.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

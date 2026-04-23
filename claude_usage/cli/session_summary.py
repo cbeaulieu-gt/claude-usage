@@ -14,7 +14,9 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
 EXIT_OK = 0
 EXIT_IO_FAILURE = 1
@@ -22,6 +24,29 @@ EXIT_NO_USER_TURNS = 2
 EXIT_NOT_JSONL = 3
 
 DEFAULT_MAX_ACTIONS: int = 50
+
+_EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "NotebookEdit"})
+_BASH_TOOLS: frozenset[str] = frozenset({"Bash", "PowerShell"})
+_MAX_COMMAND_CHARS: int = 80
+SKIPPED_TOOLS: frozenset[str] = frozenset({
+    "Read",
+    "Grep",
+    "Glob",
+    "WebFetch",
+    "WebSearch",
+    "Skill",
+    "TodoWrite",
+})
+
+_XML_WRAPPER_RE = re.compile(
+    r"<(system-reminder|command-message|command-name"
+    r"|command-args|local-command-stdout)>.*?</\1>",
+    flags=re.DOTALL,
+)
+_SLASH_COMMAND_RE = re.compile(
+    r"<command-name>(/[^<]+)</command-name>"
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[\.\!\?])\s|\n")
 
 
 @dataclass(frozen=True)
@@ -68,6 +93,431 @@ class SessionSummary:
     stopped_naturally: bool | None
 
 
+def _derive_project(entries: list[dict], slug_fallback: str | None = None) -> str:
+    """Derive the project name from transcript entries.
+
+    Strategy:
+    1. First entry with a non-empty ``cwd`` field → ``Path(cwd).name``.
+    2. Fallback: apply ``decode_project_hash`` to ``slug_fallback``
+       (the transcript-directory name passed in by ``run()``).
+    3. Final fallback: ``"unknown"``.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+        slug_fallback: Optional project-slug string from the transcript
+            directory name, used when no ``cwd`` field appears on any
+            entry.
+
+    Returns:
+        A non-empty project name string.
+    """
+    from claude_usage.parser import decode_project_hash
+
+    # Strategy 1: cwd field on any entry.
+    for entry in entries:
+        cwd = entry.get("cwd")
+        if cwd and isinstance(cwd, str):
+            name = Path(cwd).name
+            if name:
+                return name
+
+    # Strategy 2: decode the project-hash slug supplied by the caller.
+    if slug_fallback:
+        decoded = decode_project_hash(slug_fallback)
+        if decoded:
+            return decoded
+
+    # Strategy 3: final fallback.
+    return "unknown"
+
+
+def _extract_text_from_content(
+    content: str | list,
+) -> str:
+    """Extract plain text from a message content value.
+
+    Args:
+        content: Either a raw string or a list of content blocks. In the
+            list form, only blocks with ``type == "text"`` are included;
+            tool_result and other block types are skipped.
+
+    Returns:
+        A single string with all text joined by spaces, not yet stripped.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            block["text"]
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and "text" in block
+        ]
+        return " ".join(parts)
+    return ""
+
+
+def _first_sentence(text: str, max_chars: int = 200) -> str:
+    """Return the first sentence of text, capped at max_chars.
+
+    Splits on ". ", "! ", "? ", or a newline. If the first segment is
+    longer than max_chars, truncates at max_chars. Trailing punctuation
+    from the split is not included in the result.
+
+    Args:
+        text: Already-stripped input text.
+        max_chars: Maximum character count for the returned string.
+
+    Returns:
+        The first sentence or the first max_chars characters.
+    """
+    parts = _SENTENCE_SPLIT_RE.split(text, maxsplit=1)
+    sentence = parts[0].rstrip(". !?")
+    return sentence[:max_chars]
+
+
+def _derive_intent(entries: list[dict], project: str) -> str:
+    """Derive the user's intent from the first external user turn.
+
+    Steps:
+    1. Find the first ``type: "user"`` + ``userType: "external"`` entry.
+    2. Extract text from ``message.content`` (string or list of blocks).
+    3. Strip the five XML wrapper tag families via regex.
+    4. Trim whitespace. If non-empty → take the first sentence (or 200
+       chars, whichever is shorter).
+    5. If empty, look for a ``<command-name>/<name></command-name>``
+       pattern in the original content → ``"Ran /<name>"``.
+    6. Final fallback → ``"Session on <project>"``.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+        project: The already-derived project name (used as fallback).
+
+    Returns:
+        A non-empty intent string.
+    """
+    for entry in entries:
+        if not (
+            entry.get("type") == "user"
+            and entry.get("userType") == "external"
+        ):
+            continue
+        msg = entry.get("message", {})
+        raw_content = msg.get("content", "")
+        original_text = _extract_text_from_content(raw_content)
+
+        # Strip XML wrappers.
+        stripped = _XML_WRAPPER_RE.sub("", original_text).strip()
+
+        if stripped:
+            return _first_sentence(stripped)
+
+        # Slash-command fallback.
+        m = _SLASH_COMMAND_RE.search(original_text)
+        if m:
+            return f"Ran {m.group(1)}"
+
+        # Generic fallback.
+        return f"Session on {project}"
+
+    # No external user turn found (should not reach here after LookupError
+    # guard in build_session_summary, but keep defensive).
+    return f"Session on {project}"
+
+
+def _normalize_mcp_tool_name(raw: str) -> str | None:
+    """Normalize an MCP tool name to '<server>.<method>'.
+
+    Handles both forms:
+    - Plugin-scoped: ``mcp__plugin_<plugin>_<server>__<method>``
+      e.g. ``mcp__plugin_github_github__create_issue`` → ``github.create_issue``
+    - Direct: ``mcp__<server>__<method>``
+      e.g. ``mcp__azure__storage`` → ``azure.storage``
+
+    Returns None when the name is malformed (starts with ``mcp__`` but
+    does not contain the expected structural separators after stripping
+    the plugin segment), so the caller can fall back to the ``other``
+    action class. This provides forward-compatibility when new MCP naming
+    conventions appear in future Claude Code versions.
+
+    Args:
+        raw: The raw tool name from the transcript.
+
+    Returns:
+        A normalised ``<server>.<method>`` string, or None if the name
+        is structurally malformed.
+    """
+    if not raw.startswith("mcp__"):
+        return None
+    remainder = raw[len("mcp__"):]
+
+    # Strip the plugin segment if present.
+    # Plugin form: plugin_<plugin>_<server>__<method>
+    # After stripping "plugin_", the next segment is "<plugin>_<server>"
+    # which is separated from <method> by "__".
+    if remainder.startswith("plugin_"):
+        after_plugin = remainder[len("plugin_"):]
+        # after_plugin is "<plugin>_<server>__<method>" — split once on "_"
+        # to skip the plugin label, leaving "<server>__<method>".
+        parts = after_plugin.split("_", 1)
+        if len(parts) < 2:
+            return None  # Malformed: nothing after plugin label.
+        remainder = parts[1]
+
+    # remainder is now "<server>__<method>" for both forms.
+    if "__" not in remainder:
+        return None  # Malformed: no method separator.
+    server, _, method = remainder.partition("__")
+    if not server or not method:
+        return None  # Malformed: empty server or method.
+    return f"{server}.{method}"
+
+
+def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
+    """Classify a single tool-use content block into an ActionRecord.
+
+    Returns None only for tools in SKIPPED_TOOLS (info-gathering,
+    skill enablers, ceremony). Every other tool name produces an
+    ActionRecord — either a typed record for known tools or an
+    ``other``-type record for forward compatibility with unknown tools.
+
+    Classification priority:
+    1. Skip list (SKIPPED_TOOLS) — return None immediately.
+    2. Edit family (_EDIT_TOOLS) — return "edit" ActionRecord.
+    3. Bash/PowerShell family (_BASH_TOOLS) — return "bash" ActionRecord.
+    4. Agent dispatch — return "agent_dispatch" ActionRecord.
+    5. MCP tools (mcp__* prefix) — normalise name; return "mcp" on success,
+       "other" on malformed name.
+    6. Catch-all — return "other" ActionRecord for forward compatibility.
+
+    Args:
+        tool_use: A content block dict with ``type == "tool_use"``.
+
+    Returns:
+        An ActionRecord, or None if this tool use is in the skip list.
+    """
+    name: str = tool_use.get("name", "")
+    inp: dict = tool_use.get("input", {})
+
+    # 1. Skip list — info-gathering and ceremony.
+    if name in SKIPPED_TOOLS:
+        return None
+
+    # 2. Edit family.
+    if name in _EDIT_TOOLS:
+        target = inp.get("file_path", "")
+        return ActionRecord(
+            type="edit",
+            raw_tool=name,
+            target=target,
+            summary=f"Edited {target}",
+        )
+
+    # 3. Bash / PowerShell.
+    if name in _BASH_TOOLS:
+        raw_command: str = inp.get("command", "")
+        collapsed_command = " ".join(raw_command.split())
+        if len(collapsed_command) > _MAX_COMMAND_CHARS:
+            rendered = collapsed_command[:_MAX_COMMAND_CHARS] + "…"
+        else:
+            rendered = collapsed_command
+        return ActionRecord(
+            type="bash",
+            raw_tool=name,
+            target=collapsed_command,
+            summary=f"Ran `{rendered}`",
+        )
+
+    # 4. Agent dispatch.
+    if name == "Agent":
+        subagent_type: str = inp.get("subagent_type", "unknown")
+        return ActionRecord(
+            type="agent_dispatch",
+            raw_tool=name,
+            target=subagent_type,
+            summary=f"Dispatched {subagent_type} sub-agent",
+        )
+
+    # 5. MCP tools — both plugin-scoped and direct forms.
+    if name.startswith("mcp__"):
+        normalised = _normalize_mcp_tool_name(name)
+        if normalised is not None:
+            return ActionRecord(
+                type="mcp",
+                raw_tool=name,
+                target=normalised,
+                summary=f"Called `{normalised}` (MCP)",
+            )
+        # Malformed MCP name — fall through to the "other" default below.
+        # Do NOT return None here; let the catch-all produce an ActionRecord.
+        return ActionRecord(
+            type="other",
+            raw_tool=name,
+            target=name,
+            summary=f"Used {name} tool",
+        )
+
+    # 6. Catch-all — default-include unknown tools for forward compatibility.
+    return ActionRecord(
+        type="other",
+        raw_tool=name,
+        target=name,
+        summary=f"Used {name} tool",
+    )
+
+
+def _collapse_consecutive(
+    records: list[ActionRecord],
+) -> list[ActionRecord]:
+    """Collapse consecutive ActionRecords that share (type, target).
+
+    Non-adjacent duplicates are NOT collapsed — chronological order
+    is preserved and the collapse is strictly sequential.
+
+    Args:
+        records: Chronologically ordered list of ActionRecords.
+
+    Returns:
+        Collapsed list with no two adjacent records sharing
+        (type, target).
+    """
+    if not records:
+        return []
+    collapsed: list[ActionRecord] = [records[0]]
+    for rec in records[1:]:
+        prev = collapsed[-1]
+        if rec.type == prev.type and rec.target == prev.target:
+            continue  # Duplicate of the previous record — drop it.
+        collapsed.append(rec)
+    return collapsed
+
+
+def _collect_tool_uses(entries: list[dict]) -> list[ActionRecord]:
+    """Classify all tool-use content blocks from assistant entries.
+
+    Iterates entries in file order, collects tool_use blocks from
+    assistant message content, classifies each, skips None results,
+    then collapses consecutive duplicates.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+
+    Returns:
+        Chronologically ordered, collapsed list of ActionRecord
+        instances.
+    """
+    raw: list[ActionRecord] = []
+    for entry in entries:
+        if entry.get("type") != "assistant":
+            continue
+        msg = entry.get("message", {})
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "tool_use":
+                continue
+            record = _classify_tool_use(block)
+            if record is not None:
+                raw.append(record)
+    return _collapse_consecutive(raw)
+
+
+def _derive_stopped_naturally(
+    entries: list[dict],
+) -> bool | None:
+    """Resolve the tri-state stoppedNaturally field per the spec's table.
+
+    Walks entries once, tracking:
+    - ``has_any_assistant``: True once any assistant entry is seen.
+    - ``last_stop_reason``: Updated on every assistant entry; last wins.
+    - ``prevented_continuation``: True if any stop_hook_summary entry
+      has ``preventedContinuation: true``.
+
+    Resolution table (applied in priority order):
+    - no assistant entries → None (nothing to judge)
+    - last stop_reason absent/empty → None (signal absent)
+    - prevented_continuation is True → False (definitive interrupt)
+    - last stop_reason == "end_turn" → True
+    - last stop_reason in {"max_tokens", "tool_use", "stop_sequence"} → False
+    - any other non-empty stop_reason → None (unknown variant; don't guess)
+
+    Callers emit None as JSON null so consumers can distinguish
+    'unknown' from 'interrupted'.
+
+    Args:
+        entries: Parsed JSONL entries in file order.
+
+    Returns:
+        True for a clean natural end, False for a definitive interrupt
+        signal, or None when the signal is genuinely indeterminate.
+    """
+    has_any_assistant: bool = False
+    last_stop_reason: str | None = None
+    prevented_continuation: bool = False
+
+    for entry in entries:
+        etype = entry.get("type")
+
+        if etype == "assistant":
+            has_any_assistant = True
+            message = entry.get("message") or {}
+            reason = message.get("stop_reason")
+            # Update on every assistant entry — last one wins.
+            last_stop_reason = reason if reason else None
+
+        elif etype == "system":
+            if entry.get("subtype") == "stop_hook_summary":
+                if entry.get("preventedContinuation") is True:
+                    prevented_continuation = True
+
+    # Resolution table — applied in priority order.
+    if not has_any_assistant:
+        return None
+    if last_stop_reason is None:
+        return None
+    if prevented_continuation:
+        return False
+    if last_stop_reason == "end_turn":
+        return True
+    if last_stop_reason in ("max_tokens", "tool_use", "stop_sequence"):
+        return False
+    # Unknown non-empty stop_reason — don't guess.
+    return None
+
+
+def _apply_max_actions_cap(
+    actions: list[str],
+    max_actions: int,
+) -> list[str]:
+    """Apply the --max-actions cap with sentinel truncation.
+
+    When ``max_actions`` is 0, the cap is disabled and the full list is
+    returned. Otherwise, if ``len(actions) > max_actions``, keep the
+    first ``max_actions - 1`` entries and append a sentinel string of
+    the form ``'… (<K> additional actions omitted)'`` where ``K`` is the
+    number of dropped entries.
+
+    Args:
+        actions: Already-rendered past-tense action strings.
+        max_actions: Cap value. 0 means no cap.
+
+    Returns:
+        The (possibly truncated) list of action strings.
+    """
+    if max_actions <= 0:
+        return list(actions)
+    if len(actions) <= max_actions:
+        return list(actions)
+    kept = actions[: max_actions - 1]
+    dropped = len(actions) - (max_actions - 1)
+    sentinel = f"… ({dropped} additional actions omitted)"
+    return [*kept, sentinel]
+
+
 def build_session_summary(
     entries: list[dict],
     *,
@@ -84,17 +534,30 @@ def build_session_summary(
         entries: Parsed JSONL entries (already filtered for successfully
             decoded objects).
         project_slug_fallback: Optional transcript-directory slug passed
-            through to `_derive_project` for the `decode_project_hash`
-            fallback when no `cwd` field appears on any entry.
+            through to ``_derive_project`` for the ``decode_project_hash``
+            fallback when no ``cwd`` field appears on any entry.
         max_actions: Soft cap on emitted actions; 0 disables the cap.
 
     Returns:
         Fully-populated SessionSummary.
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
     """
-    raise NotImplementedError("build_session_summary — implemented in Phase 3")
+    project = _derive_project(entries, project_slug_fallback)
+    intent = _derive_intent(entries, project)
+    records = _collect_tool_uses(entries)
+    stopped_naturally = _derive_stopped_naturally(entries)
+
+    # Render ActionRecords to strings, then apply the cap.
+    action_strings_full = [r.summary for r in records]
+    action_strings = _apply_max_actions_cap(
+        action_strings_full, max_actions
+    )
+
+    return SessionSummary(
+        project=project,
+        intent=intent,
+        actions=action_strings,
+        stopped_naturally=stopped_naturally,
+    )
 
 
 def render_json(summary: SessionSummary) -> str:
