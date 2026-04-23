@@ -139,7 +139,7 @@ and resolves Open Question #2 from the spec.
 - Create: `tests/fixtures/session_summaries/dashboard_baseline_input/` (minimal fake `.claude` tree)
 - Create: `tests/fixtures/dashboard_snapshot_pre_refactor.json`
 
-- [ ] **Step 1: Construct the minimal input fixture tree.**
+- [x] **Step 1: Construct the minimal input fixture tree.**
 
   Create the directory structure that mimics what `parse_sessions` expects under a `.claude` data
   directory. The current `__main__.py` passes `args.data_dir` (a `Path`) to `parse_sessions`. The
@@ -165,7 +165,7 @@ and resolves Open Question #2 from the spec.
   Write this file verbatim. The `fake-project-abc123` slug does not need to decode to a real path;
   `parse_sessions` reads the JSONL content, not the directory name.
 
-- [ ] **Step 2: Capture the baseline snapshot.**
+- [x] **Step 2: Capture the baseline snapshot.**
 
   With `main` checked out (no refactor changes present), run:
 
@@ -188,7 +188,7 @@ and resolves Open Question #2 from the spec.
   > If that flag name has changed in the actual file on disk, read `claude_usage/__main__.py`
   > and adapt the command accordingly before running. Do not assume — verify.
 
-- [ ] **Step 3: Commit the baseline fixtures.**
+- [x] **Step 3: Commit the baseline fixtures.**
 
   ```bash
   git -C "$(git rev-parse --show-toplevel)" add \
