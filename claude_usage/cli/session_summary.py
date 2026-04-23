@@ -28,10 +28,14 @@ DEFAULT_MAX_ACTIONS: int = 50
 _EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "NotebookEdit"})
 _BASH_TOOLS: frozenset[str] = frozenset({"Bash", "PowerShell"})
 _MAX_COMMAND_CHARS: int = 80
-_SKIP_TOOLS: frozenset[str] = frozenset({
-    "Read", "Grep", "Glob",
-    "WebFetch", "WebSearch",
-    "Skill", "TodoWrite",
+SKIPPED_TOOLS: frozenset[str] = frozenset({
+    "Read",
+    "Grep",
+    "Glob",
+    "WebFetch",
+    "WebSearch",
+    "Skill",
+    "TodoWrite",
 })
 
 _XML_WRAPPER_RE = re.compile(
@@ -288,7 +292,7 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
     inp: dict = tool_use.get("input", {})
 
     # Skip list — info-gathering and ceremony.
-    if name in _SKIP_TOOLS:
+    if name in SKIPPED_TOOLS:
         return None
 
     # Edit family.

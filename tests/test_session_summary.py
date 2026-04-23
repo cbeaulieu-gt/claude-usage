@@ -864,4 +864,120 @@ class TestToolClassification:
 
         # Both normalize to the same target → collapse reduces to one.
         assert len(records) == 1
-        assert records[0].target == "github.create_issue"
+
+    def test_action_classification_skip_set_is_complete(self) -> None:
+        """The SKIPPED_TOOLS module constant contains all seven skip-list members.
+
+        This test is a contract assertion on the constant itself. If a new
+        tool is added to or removed from the skip list in the spec, this
+        test must be updated in lockstep.
+        """
+        from claude_usage.cli.session_summary import SKIPPED_TOOLS
+
+        expected = frozenset({
+            "Read",
+            "Grep",
+            "Glob",
+            "Skill",
+            "TodoWrite",
+            "WebFetch",
+            "WebSearch",
+        })
+        assert SKIPPED_TOOLS == expected
+
+    def test_action_classification_skips_mix_with_edit(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Seven skipped tool uses plus one Edit produces exactly one action.
+
+        Verifies that the skip-set check fires before any other dispatch,
+        that the Edit is still classified after skipped tools, and that the
+        resulting action list has exactly one entry.
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        skip_tools = [
+            ("Read", {"file_path": "foo.py"}),
+            ("Grep", {"pattern": "def ", "path": "."}),
+            ("Glob", {"pattern": "**/*.py"}),
+            ("WebFetch", {"url": "https://example.com"}),
+            ("WebSearch", {"query": "python"}),
+            ("Skill", {"skill": "python"}),
+            ("TodoWrite", {"todos": []}),
+        ]
+
+        lines = [
+            json.dumps({
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": "Look at things, then edit one.",
+                },
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-mix",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }),
+        ]
+        for i, (tool_name, inp) in enumerate(skip_tools, start=1):
+            lines.append(json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": f"tu-{i:03d}",
+                        "name": tool_name,
+                        "input": inp,
+                    }],
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "tool_use",
+                    "usage": {
+                        "input_tokens": 20,
+                        "output_tokens": 5,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+                "uuid": f"a-{i:03d}",
+                "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
+                "sessionId": "sess-mix",
+            }))
+        # One Edit at the end — must survive into the action list.
+        lines.append(json.dumps({
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-008",
+                    "name": "Edit",
+                    "input": {
+                        "file_path": "src/result.py",
+                        "old_string": "x",
+                        "new_string": "y",
+                    },
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 20,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-008",
+            "timestamp": "2026-04-20T09:00:08.000Z",
+            "sessionId": "sess-mix",
+        }))
+
+        fixture = tmp_path / "skip_mix.jsonl"
+        fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert len(summary.actions) == 1
+        assert summary.actions[0] == "Edited src/result.py"

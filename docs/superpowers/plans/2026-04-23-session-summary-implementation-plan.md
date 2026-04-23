@@ -3346,7 +3346,7 @@ Edit.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_skip_set_is_complete` to
+- [x] **Step 1: Add `test_action_classification_skip_set_is_complete` to
   `TestToolClassification`.**
 
   ```python
@@ -3468,7 +3468,7 @@ Edit.
           assert summary.actions[0] == "Edited src/result.py"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestToolClassification \
@@ -3480,7 +3480,7 @@ Edit.
   but not `SKIPPED_TOOLS` (public, no underscore). The mix test passes if the
   skip logic is correct from Task 3.4.
 
-- [ ] **Step 3: Rename the private constant to the public name and ensure it
+- [x] **Step 3: Rename the private constant to the public name and ensure it
   is exported.**
 
   In `claude_usage/cli/session_summary.py`, rename `_SKIP_TOOLS` to
@@ -3512,7 +3512,7 @@ Edit.
   })
   ```
 
-- [ ] **Step 4: Run → confirm all tests pass.**
+- [x] **Step 4: Run → confirm all tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3521,7 +3521,7 @@ Edit.
   Expected: all tests pass. `test_action_classification_skip_set_is_complete`
   now finds the public `SKIPPED_TOOLS` constant and the frozenset matches.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
