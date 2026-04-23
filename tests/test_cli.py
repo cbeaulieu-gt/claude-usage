@@ -39,9 +39,9 @@ EXPECTED_TOP_LEVEL_KEYS = {
 
 class TestFormatJson:
     def test_outputs_valid_json(self, sample_session_dir: Path):
-        """--format json must write parseable JSON to stdout."""
+        """dashboard --format json must write parseable JSON to stdout."""
         result = run_cli(
-            ["--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
             cwd=WORKTREE_ROOT,
         )
         assert result.returncode == 0, f"CLI failed:\n{result.stderr}"
@@ -51,7 +51,7 @@ class TestFormatJson:
     def test_has_expected_top_level_keys(self, sample_session_dir: Path):
         """JSON output must contain all expected top-level keys."""
         result = run_cli(
-            ["--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -60,7 +60,7 @@ class TestFormatJson:
     def test_contains_aggregated_data(self, sample_session_dir: Path):
         """JSON output must reflect the parsed session data."""
         result = run_cli(
-            ["--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -74,7 +74,7 @@ class TestFormatJson:
         """generated_at must be a valid ISO-8601 datetime string."""
         from datetime import datetime
         result = run_cli(
-            ["--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -86,6 +86,7 @@ class TestFormatJson:
         """When limit flags are passed, they appear in the JSON output."""
         result = run_cli(
             [
+                "dashboard",
                 "--format", "json",
                 "--no-open",
                 "--data-dir", str(sample_session_dir),
@@ -104,16 +105,16 @@ class TestFormatJson:
     def test_limits_null_when_not_set(self, sample_session_dir: Path):
         """When no limit flags are passed, limits key is null."""
         result = run_cli(
-            ["--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
         assert data["limits"] is None
 
     def test_empty_data_dir_still_valid_json(self, tmp_path: Path):
-        """--format json with an empty data dir must still produce valid JSON."""
+        """dashboard --format json with an empty data dir must still produce valid JSON."""
         result = run_cli(
-            ["--format", "json", "--no-open", "--data-dir", str(tmp_path)],
+            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(tmp_path)],
             cwd=WORKTREE_ROOT,
         )
         assert result.returncode == 0
@@ -123,9 +124,10 @@ class TestFormatJson:
         assert data["sessions"] == []
 
     def test_does_not_write_html_file(self, sample_session_dir: Path, tmp_path: Path):
-        """--format json must not write any HTML file."""
+        """dashboard --format json must not write any HTML file."""
         result = run_cli(
             [
+                "dashboard",
                 "--format", "json",
                 "--no-open",
                 "--data-dir", str(sample_session_dir),
@@ -143,6 +145,7 @@ class TestFormatHtmlDefault:
         output_path = tmp_path / "dashboard.html"
         result = run_cli(
             [
+                "dashboard",
                 "--no-open",
                 "--data-dir", str(sample_session_dir),
                 "--output", str(output_path),
@@ -157,6 +160,7 @@ class TestFormatHtmlDefault:
         output_path = tmp_path / "dashboard.html"
         result = run_cli(
             [
+                "dashboard",
                 "--format", "html",
                 "--no-open",
                 "--data-dir", str(sample_session_dir),

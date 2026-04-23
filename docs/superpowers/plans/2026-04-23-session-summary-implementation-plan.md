@@ -139,7 +139,7 @@ and resolves Open Question #2 from the spec.
 - Create: `tests/fixtures/session_summaries/dashboard_baseline_input/` (minimal fake `.claude` tree)
 - Create: `tests/fixtures/dashboard_snapshot_pre_refactor.json`
 
-- [ ] **Step 1: Construct the minimal input fixture tree.**
+- [x] **Step 1: Construct the minimal input fixture tree.**
 
   Create the directory structure that mimics what `parse_sessions` expects under a `.claude` data
   directory. The current `__main__.py` passes `args.data_dir` (a `Path`) to `parse_sessions`. The
@@ -165,7 +165,7 @@ and resolves Open Question #2 from the spec.
   Write this file verbatim. The `fake-project-abc123` slug does not need to decode to a real path;
   `parse_sessions` reads the JSONL content, not the directory name.
 
-- [ ] **Step 2: Capture the baseline snapshot.**
+- [x] **Step 2: Capture the baseline snapshot.**
 
   With `main` checked out (no refactor changes present), run:
 
@@ -188,7 +188,7 @@ and resolves Open Question #2 from the spec.
   > If that flag name has changed in the actual file on disk, read `claude_usage/__main__.py`
   > and adapt the command accordingly before running. Do not assume — verify.
 
-- [ ] **Step 3: Commit the baseline fixtures.**
+- [x] **Step 3: Commit the baseline fixtures.**
 
   ```bash
   git -C "$(git rev-parse --show-toplevel)" add \
@@ -218,7 +218,7 @@ and resolves Open Question #2 from the spec.
 - Create: `claude_usage/cli/dashboard.py`
 - Modify: `claude_usage/__main__.py` (temporary intermediate state)
 
-- [ ] **Step 1: Create `claude_usage/cli/__init__.py`.**
+- [x] **Step 1: Create `claude_usage/cli/__init__.py`.**
 
   Exact file contents:
 
@@ -228,7 +228,7 @@ and resolves Open Question #2 from the spec.
 
   That is the entire file — one docstring line, nothing else.
 
-- [ ] **Step 2: Create `claude_usage/cli/dashboard.py`.**
+- [x] **Step 2: Create `claude_usage/cli/dashboard.py`.**
 
   Move the body of `__main__.py`'s `main()` function into a new `run(args)` function. Preserve all
   imports and helper functions. The helper functions `_parse_window` and `_parse_date` move into
@@ -453,7 +453,7 @@ and resolves Open Question #2 from the spec.
       return 0
   ```
 
-- [ ] **Step 3: Run existing tests to confirm nothing is broken.**
+- [x] **Step 3: Run existing tests to confirm nothing is broken.**
 
   ```bash
   uv run pytest -x
@@ -462,7 +462,7 @@ and resolves Open Question #2 from the spec.
   Expected: all tests pass. The old `main()` in `__main__.py` is still present (import surface
   intact); the new `cli/dashboard.py` is now importable but not yet wired to anything.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
   ```bash
   git add claude_usage/cli/__init__.py claude_usage/cli/dashboard.py
@@ -487,7 +487,7 @@ and resolves Open Question #2 from the spec.
 - Create: `claude_usage/cli/session_summary.py` (stub only — full implementation in Phase 2+)
 - Create: `tests/test_cli_subcommands.py`
 
-- [ ] **Step 1: Write the failing test first.**
+- [x] **Step 1: Write the failing test first.**
 
   Create `tests/test_cli_subcommands.py` with the following content:
 
@@ -541,7 +541,7 @@ and resolves Open Question #2 from the spec.
       assert result.returncode != 0
   ```
 
-- [ ] **Step 2: Run the test — confirm it fails.**
+- [x] **Step 2: Run the test — confirm it fails.**
 
   ```bash
   uv run pytest tests/test_cli_subcommands.py -x -v
@@ -552,7 +552,7 @@ and resolves Open Question #2 from the spec.
     will not contain "session-summary".
   - `test_old_flag_only_form_exits_nonzero` — current CLI accepts `--format json` and exits 0.
 
-- [ ] **Step 3: Create the `session_summary.py` stub.**
+- [x] **Step 3: Create the `session_summary.py` stub.**
 
   The stub must make `from claude_usage.cli import session_summary` succeed so `__main__.py` can
   import it. Full implementation comes in Phase 2+.
@@ -629,7 +629,7 @@ and resolves Open Question #2 from the spec.
       )
   ```
 
-- [ ] **Step 4: Rewrite `claude_usage/__main__.py`.**
+- [x] **Step 4: Rewrite `claude_usage/__main__.py`.**
 
   Full new file contents (~30 lines):
 
@@ -679,7 +679,7 @@ and resolves Open Question #2 from the spec.
       main()
   ```
 
-- [ ] **Step 5: Run the full test suite.**
+- [x] **Step 5: Run the full test suite.**
 
   ```bash
   uv run pytest -x
@@ -690,7 +690,7 @@ and resolves Open Question #2 from the spec.
   `subprocess` will now hit the subparser dispatcher — confirm those still pass or update
   their invocation to `claude-usage dashboard [flags]`.)
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
   ```bash
   git add claude_usage/__main__.py \
@@ -717,7 +717,7 @@ and resolves Open Question #2 from the spec.
 **Files:**
 - Create: `tests/test_dashboard_snapshot.py`
 
-- [ ] **Step 1: Write the snapshot regression test.**
+- [x] **Step 1: Write the snapshot regression test.**
 
   Create `tests/test_dashboard_snapshot.py`:
 
@@ -790,7 +790,7 @@ and resolves Open Question #2 from the spec.
       )
   ```
 
-- [ ] **Step 2: Run the test.**
+- [x] **Step 2: Run the test.**
 
   ```bash
   uv run pytest tests/test_dashboard_snapshot.py -v
@@ -799,7 +799,7 @@ and resolves Open Question #2 from the spec.
   Expected: `test_existing_dashboard_unchanged` passes. The refactor was a verbatim body move;
   dashboard behavior is unchanged.
 
-- [ ] **Step 3: Commit.**
+- [x] **Step 3: Commit.**
 
   ```bash
   git add tests/test_dashboard_snapshot.py
