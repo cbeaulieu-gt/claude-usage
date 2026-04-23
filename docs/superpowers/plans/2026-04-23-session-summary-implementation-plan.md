@@ -4358,4 +4358,1529 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-<!-- PASS-3-END: next pass writes Phase 4 (errors), Phase 5 (output formats), Phase 6 (polish + README + final verify), and the AC coverage matrix -->
+---
+
+## Phase 4 — Error handling & exit codes
+
+> **Goal:** Implement `run(args)` incrementally across four tasks. After Task 4.4
+> the function is complete. Each task adds exactly one error path or the success
+> wiring; the prior task's `NotImplementedError` sentinel marks the boundary so
+> each step's test targets only the new behavior.
+
+---
+
+### Task 4.1 — Exit 1: IO failures from `open()` / iteration
+
+**Files modified:**
+- `tests/test_session_summary.py`
+- `claude_usage/cli/session_summary.py`
+
+---
+
+- [ ] **Step 1: Write the failing test.**
+
+  Add to `tests/test_session_summary.py` (inside `class TestErrorPaths` or at
+  module level — implementer chooses; be consistent):
+
+  ```python
+  import subprocess
+  import sys
+
+
+  class TestErrorPaths:
+      """Tests for non-zero exit codes and stdout/stderr discipline."""
+
+      def test_missing_file_exits_1(self, tmp_path: pytest.fixture) -> None:
+          """Exit 1 when --path points to a non-existent file.
+
+          Asserts:
+            - Exit code is EXIT_IO_FAILURE (1).
+            - stdout is empty (no partial output).
+            - stderr contains the expected message fragments.
+          """
+          nonexistent = tmp_path / "nonexistent.jsonl"
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(nonexistent),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.returncode == 1
+          assert result.stdout == ""
+          assert "cannot read transcript at" in result.stderr
+          assert str(nonexistent) in result.stderr
+          # stderr should name one of the OSError subclass names
+          assert any(
+              name in result.stderr
+              for name in (
+                  "FileNotFoundError",
+                  "OSError",
+                  "No such file or directory",
+              )
+          )
+  ```
+
+- [ ] **Step 2: Run → confirm it fails.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestErrorPaths::test_missing_file_exits_1 -v
+  ```
+
+  Expected failure reason: `session-summary` subcommand does not exist yet, or
+  `run()` raises `NotImplementedError`. Either way the exit code is not 1.
+
+- [ ] **Step 3: Implement `read_transcript` + partial `run`.**
+
+  In `claude_usage/cli/session_summary.py`, add the following helper and wire it
+  into a partial `run`. The function returns a tuple so Task 4.3 can extend it
+  without changing the call site.
+
+  ```python
+  from __future__ import annotations
+
+  import json
+  import sys
+  from pathlib import Path
+  from typing import TYPE_CHECKING
+
+  if TYPE_CHECKING:
+      import argparse
+
+  EXIT_OK = 0
+  EXIT_IO_FAILURE = 1
+  EXIT_NO_USER_TURNS = 2
+  EXIT_NOT_JSONL = 3
+
+
+  def read_transcript(
+      path: Path,
+  ) -> tuple[list[dict], int]:
+      """Read and parse a JSONL transcript file.
+
+      Opens *path*, iterates its lines, skips blanks, silently skips
+      individual lines that fail ``json.loads``, and returns the
+      successfully parsed entries together with the total non-blank
+      line count.
+
+      The non-blank count is used by ``run`` to distinguish an
+      empty/whitespace-only file (exit 2) from a file that has content
+      but none of it parses (exit 3).
+
+      Args:
+          path: Absolute or relative path to the JSONL transcript file.
+
+      Returns:
+          A 2-tuple ``(entries, non_blank_lines)`` where *entries* is
+          the list of successfully parsed dicts and *non_blank_lines*
+          is the count of non-empty, non-whitespace lines seen.
+
+      Raises:
+          OSError: Any subclass raised by ``open()`` or line iteration
+              (``FileNotFoundError``, ``PermissionError``, etc.).
+      """
+      entries: list[dict] = []
+      non_blank_lines = 0
+      with path.open(encoding="utf-8") as fh:
+          for raw in fh:
+              stripped = raw.strip()
+              if not stripped:
+                  continue
+              non_blank_lines += 1
+              try:
+                  entries.append(json.loads(stripped))
+              except json.JSONDecodeError:
+                  pass  # tolerate individual-line failures
+      return entries, non_blank_lines
+
+
+  def run(args: argparse.Namespace) -> int:
+      """Entry point for the session-summary subcommand.
+
+      Dispatches ``--path`` through the full parse → summarise → render
+      pipeline, printing JSON (or text) to stdout on success and a
+      single diagnostic line to stderr on failure.
+
+      Args:
+          args: Parsed CLI namespace.  Expected attributes:
+              ``args.path`` (str), ``args.format`` (str),
+              ``args.max_actions`` (int).
+
+      Returns:
+          Integer exit code (one of ``EXIT_OK``, ``EXIT_IO_FAILURE``,
+          ``EXIT_NO_USER_TURNS``, ``EXIT_NOT_JSONL``).
+      """
+      path = Path(args.path)
+
+      # ── Phase 4.1: IO failure ────────────────────────────────────────
+      try:
+          entries, non_blank_lines = read_transcript(path)
+      except OSError as exc:
+          print(
+              f"session-summary: cannot read transcript at '{path}': "
+              f"{type(exc).__name__}: {exc}",
+              file=sys.stderr,
+          )
+          return EXIT_IO_FAILURE
+
+      # Remaining logic lands in Tasks 4.2, 4.3, 4.4.
+      raise NotImplementedError(
+          "remaining logic lands in Tasks 4.2, 4.3, 4.4"
+      )
+  ```
+
+  The `run` function must be registered in `claude_usage/__main__.py` as the
+  handler for the `session-summary` subparser (that wiring was done in Phase 1).
+  Confirm it is already wired; if not, add:
+
+  ```python
+  # inside build_parser() or wherever session-summary parser is set up:
+  from claude_usage.cli import session_summary as ss_mod
+  ss_parser.set_defaults(func=ss_mod.run)
+  ```
+
+- [ ] **Step 4: Run → confirm the test passes.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestErrorPaths::test_missing_file_exits_1 -v
+  ```
+
+  Expected: PASSED. The `OSError` from opening a nonexistent path propagates
+  up through `read_transcript`, is caught, and the function returns exit code 1.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement read_transcript + exit-1 IO failure path
+
+  Adds read_transcript() helper that opens --path, skips blank lines,
+  tolerates per-line json.JSONDecodeError, and raises OSError naturally.
+  run() wraps it; any OSError prints one stderr line and returns exit 1.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 4.2 — Exit 2: no user turns (three sub-cases)
+
+**Files modified:**
+- `tests/test_session_summary.py`
+- `claude_usage/cli/session_summary.py`
+
+---
+
+- [ ] **Step 1: Write the failing tests.**
+
+  The three sub-cases each require a fixture file. Add fixture creation inline
+  in the tests using `tmp_path` so no checked-in fixture is required (the
+  checked-in `empty_no_user_turns.jsonl` fixture already exists for the
+  subprocess test; use it where available, fall back to `tmp_path`):
+
+  ```python
+  import pytest
+
+
+  class TestExitNoUserTurns:
+      """Exit 2 when readable transcript has no external user turns."""
+
+      def test_empty_session_exits_2(self) -> None:
+          """Agent-setting / system-only transcript → exit 2."""
+          fixture = (
+              Path("tests/fixtures/session_summaries")
+              / "empty_no_user_turns.jsonl"
+          )
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(fixture),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.returncode == 2
+          assert result.stdout == ""
+          assert "contains no user turns" in result.stderr
+
+      def test_zero_byte_file_exits_2(self, tmp_path: pytest.fixture) -> None:
+          """Zero-byte file → exit 2 (not exit 3)."""
+          zero_byte = tmp_path / "zero_byte.jsonl"
+          zero_byte.write_text("")
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(zero_byte),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.returncode == 2
+          assert result.stdout == ""
+          assert "contains no user turns" in result.stderr
+
+      def test_whitespace_only_file_exits_2(
+          self, tmp_path: pytest.fixture
+      ) -> None:
+          """File with only blank lines → exit 2 (not exit 3)."""
+          ws_only = tmp_path / "whitespace_only.jsonl"
+          ws_only.write_text("\n   \n\t\n")
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(ws_only),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.returncode == 2
+          assert result.stdout == ""
+          assert "contains no user turns" in result.stderr
+  ```
+
+- [ ] **Step 2: Run → confirm all three fail.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestExitNoUserTurns -v
+  ```
+
+  Expected failure: the subprocess exits with the `NotImplementedError`
+  traceback, which produces a non-zero exit code (likely 1 from the exception),
+  not exit code 2.
+
+- [ ] **Step 3: Add the exit-2 branch to `run`.**
+
+  Replace the `NotImplementedError` sentinel in `run` with the exit-2 check,
+  leaving a new sentinel for the remaining path:
+
+  ```python
+      # ── Phase 4.2: no user turns ─────────────────────────────────────
+      has_user_turns = any(
+          entry.get("type") == "user"
+          and entry.get("userType") == "external"
+          for entry in entries
+      )
+      if not has_user_turns:
+          print(
+              f"session-summary: transcript '{path}' contains no user turns",
+              file=sys.stderr,
+          )
+          return EXIT_NO_USER_TURNS
+
+      # Remaining logic lands in Tasks 4.3, 4.4.
+      raise NotImplementedError(
+          "remaining logic lands in Tasks 4.3, 4.4"
+      )
+  ```
+
+  **Why this covers all three sub-cases:** `read_transcript` returns an empty
+  `entries` list for both zero-byte and whitespace-only files (no non-blank
+  lines → nothing appended). An empty list fails the `any(...)` check →
+  exits 2. The system-entries-only fixture also has no `userType == "external"`
+  entries → same path.
+
+- [ ] **Step 4: Run → confirm all three pass; re-run Task 4.1 test to confirm
+  no regression.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestExitNoUserTurns \
+               tests/test_session_summary.py::TestErrorPaths -v
+  ```
+
+  Expected: all four tests PASSED.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement exit-2 path for transcripts with no user turns
+
+  Three sub-cases all reach exit 2: zero-byte file, whitespace-only file,
+  and a transcript that parsed successfully but has no external user turns.
+  Empty files return an empty entries list from read_transcript, so the
+  has_user_turns check naturally handles them without a special branch.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 4.3 — Exit 3: ≥1 non-blank line, every line fails `json.loads`
+
+**Files modified:**
+- `tests/test_session_summary.py`
+- `claude_usage/cli/session_summary.py`
+
+---
+
+- [ ] **Step 1: Write the failing test.**
+
+  ```python
+  class TestExitNotJsonl:
+      """Exit 3 when the file has content but none parses as JSONL."""
+
+      def test_malformed_file_exits_3(self, tmp_path: pytest.fixture) -> None:
+          """File with non-blank, non-JSON lines → exit 3.
+
+          This is distinct from exit 2: bytes are present, attempted,
+          and rejected — not an empty/whitespace file.
+          """
+          malformed = tmp_path / "all_malformed.jsonl"
+          malformed.write_text(
+              "this is not json\n"
+              "{also not json\n"
+              "definitely: not: json: either\n"
+          )
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(malformed),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.returncode == 3
+          assert result.stdout == ""
+          assert "is not valid JSONL" in result.stderr
+
+      def test_empty_is_not_exit_3(self, tmp_path: pytest.fixture) -> None:
+          """Zero-byte file must exit 2, not 3 — spec requirement.
+
+          Exit 3 requires at least one non-blank line that was attempted.
+          """
+          empty = tmp_path / "empty.jsonl"
+          empty.write_text("")
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(empty),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          # Must be 2, not 3.
+          assert result.returncode == 2
+  ```
+
+- [ ] **Step 2: Run → confirm both tests fail.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestExitNotJsonl -v
+  ```
+
+  Expected: both fail. `test_malformed_file_exits_3` exits from the
+  `NotImplementedError` (not code 3); `test_empty_is_not_exit_3` may already
+  pass (exit 2 is wired), but confirm.
+
+- [ ] **Step 3: Add the exit-3 branch to `run`.**
+
+  The `read_transcript` signature already returns `non_blank_lines`. Insert the
+  exit-3 check between the IO catch and the exit-2 check. The critical ordering
+  is: IO failure → malformed check → no-user-turns check → success path.
+
+  Updated `run` body (replace existing try/except + two sentinels with):
+
+  ```python
+      path = Path(args.path)
+
+      # ── Phase 4.1: IO failure ────────────────────────────────────────
+      try:
+          entries, non_blank_lines = read_transcript(path)
+      except OSError as exc:
+          print(
+              f"session-summary: cannot read transcript at '{path}': "
+              f"{type(exc).__name__}: {exc}",
+              file=sys.stderr,
+          )
+          return EXIT_IO_FAILURE
+
+      # ── Phase 4.3: not JSONL ─────────────────────────────────────────
+      # Condition: file had parseable-attempt content (non_blank_lines > 0)
+      # but zero entries survived json.loads.
+      # NOTE: non_blank_lines == 0 means empty/whitespace-only → fall
+      # through to the no-user-turns check (exit 2), not here.
+      if not entries and non_blank_lines > 0:
+          print(
+              f"session-summary: transcript '{path}' is not valid JSONL",
+              file=sys.stderr,
+          )
+          return EXIT_NOT_JSONL
+
+      # ── Phase 4.2: no user turns ─────────────────────────────────────
+      has_user_turns = any(
+          entry.get("type") == "user"
+          and entry.get("userType") == "external"
+          for entry in entries
+      )
+      if not has_user_turns:
+          print(
+              f"session-summary: transcript '{path}' contains no user turns",
+              file=sys.stderr,
+          )
+          return EXIT_NO_USER_TURNS
+
+      # Remaining logic lands in Task 4.4.
+      raise NotImplementedError("remaining logic lands in Task 4.4")
+  ```
+
+  **Why empty → exit 2 and not exit 3:** when `non_blank_lines == 0`, the exit-3
+  condition `not entries and non_blank_lines > 0` is `False`. Execution falls
+  through to the exit-2 check where `has_user_turns` is `False` (empty list).
+  This matches the spec's explicit amendment: "Zero-byte and whitespace-only
+  files fall under exit 2, not exit 3."
+
+- [ ] **Step 4: Run → both new tests pass; re-run full test class suite.**
+
+  ```bash
+  uv run pytest \
+      tests/test_session_summary.py::TestExitNotJsonl \
+      tests/test_session_summary.py::TestExitNoUserTurns \
+      tests/test_session_summary.py::TestErrorPaths \
+      -v
+  ```
+
+  Expected: all six tests PASSED. Specifically confirm `test_empty_is_not_exit_3`
+  exits 2 and `test_zero_byte_file_exits_2` still exits 2.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement exit-3 path for content that is not valid JSONL
+
+  Exit 3 fires when non_blank_lines > 0 AND entries is empty — meaning
+  the file had bytes that were attempted as JSON and all failed.
+  Empty and whitespace-only files have non_blank_lines == 0, so they
+  fall through to exit 2 as specified.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 4.4 — stdout/stderr discipline: success path emits JSON only on stdout
+
+**Files modified:**
+- `tests/test_session_summary.py`
+- `claude_usage/cli/session_summary.py`
+
+---
+
+- [ ] **Step 1: Write the failing tests.**
+
+  ```python
+  class TestStdoutStderrDiscipline:
+      """stdout/stderr contract: errors → stderr only; success → stdout only."""
+
+      def test_stdout_on_error_is_empty(self, tmp_path: pytest.fixture) -> None:
+          """Any error path must emit nothing to stdout.
+
+          Uses the missing-file path (exit 1) as a representative error.
+          Asserts stdout is completely empty and stderr is exactly one line.
+          """
+          nonexistent = tmp_path / "missing.jsonl"
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(nonexistent),
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.stdout == ""
+          # stderr must be exactly one non-empty line
+          stderr_lines = [
+              ln for ln in result.stderr.splitlines() if ln.strip()
+          ]
+          assert len(stderr_lines) == 1
+
+      def test_stdout_on_success_is_pure_json(self) -> None:
+          """Success path stdout is a parseable JSON document, nothing else.
+
+          Asserts:
+            - ``json.loads(stdout)`` succeeds without error.
+            - stdout has exactly one trailing newline (no header text,
+              no progress banners, no leading whitespace).
+            - All four contract keys are present.
+          """
+          fixture = (
+              Path("tests/fixtures/session_summaries") / "happy_path.jsonl"
+          )
+          result = subprocess.run(
+              [
+                  sys.executable, "-m", "claude_usage",
+                  "session-summary",
+                  "--path", str(fixture),
+                  "--format", "json",
+              ],
+              capture_output=True,
+              text=True,
+          )
+          assert result.returncode == 0
+          # Must parse cleanly — no leading/trailing non-JSON text
+          parsed = json.loads(result.stdout)
+          assert set(parsed.keys()) >= {
+              "project", "intent", "actions", "stoppedNaturally"
+          }
+          # Exactly one trailing newline — the JSON document ends cleanly
+          assert result.stdout.endswith("\n")
+          assert not result.stdout.endswith("\n\n")
+  ```
+
+- [ ] **Step 2: Run → confirm both tests fail.**
+
+  ```bash
+  uv run pytest \
+      tests/test_session_summary.py::TestStdoutStderrDiscipline -v
+  ```
+
+  Expected: `test_stdout_on_success_is_pure_json` fails because the success
+  path still hits `NotImplementedError`.
+
+- [ ] **Step 3: Wire the success path and implement `render_json` minimally.**
+
+  First, implement `render_json` and its private helper. The helper produces an
+  explicitly ordered dict so key order in the JSON output is deterministic
+  (Task 5.1 will add a dedicated key-order test to lock it down; the
+  implementation is correct here already):
+
+  ```python
+  def _summary_to_dict(summary: SessionSummary) -> dict:
+      """Convert a SessionSummary to an ordered dict matching the JSON contract.
+
+      Key order matches the spec: project → intent → actions →
+      stoppedNaturally.  Python 3.7+ preserves insertion order, so
+      ``json.dumps`` will emit keys in this sequence.
+
+      Args:
+          summary: The session summary to convert.
+
+      Returns:
+          An ordered dict with camelCase keys ready for ``json.dumps``.
+      """
+      return {
+          "project": summary.project,
+          "intent": summary.intent,
+          "actions": summary.actions,
+          "stoppedNaturally": summary.stopped_naturally,
+      }
+
+
+  def render_json(summary: SessionSummary) -> str:
+      """Render a SessionSummary as a pretty-printed JSON string.
+
+      Uses ``indent=2`` and ``ensure_ascii=False`` per the output
+      contract. Key order is deterministic: project, intent, actions,
+      stoppedNaturally.
+
+      Args:
+          summary: The session summary dataclass instance.
+
+      Returns:
+          A JSON string, not terminated with a newline (the caller
+          adds exactly one trailing newline before printing to stdout).
+      """
+      return json.dumps(
+          _summary_to_dict(summary), indent=2, ensure_ascii=False
+      )
+  ```
+
+  Then add a stub `render_text` to prevent `AttributeError` until Task 5.2:
+
+  ```python
+  def render_text(summary: SessionSummary) -> str:
+      """Render a SessionSummary as a human-readable debug string.
+
+      Args:
+          summary: The session summary dataclass instance.
+
+      Returns:
+          Multi-line human-readable string.
+
+      Raises:
+          NotImplementedError: Until Task 5.2 is implemented.
+      """
+      raise NotImplementedError("implemented in Task 5.2")
+  ```
+
+  Now complete `run` by replacing the final `NotImplementedError` sentinel with
+  the success path. Show the **complete `run` function** as it stands after
+  Task 4.4 (consolidating 4.1 through 4.4):
+
+  ```python
+  def run(args: argparse.Namespace) -> int:
+      """Entry point for the session-summary subcommand.
+
+      Full pipeline: read → validate → summarise → render → emit.
+      Writes JSON (or text) to stdout on success; one diagnostic line
+      to stderr on any failure.  Never mixes stdout and stderr on the
+      same code path.
+
+      Args:
+          args: Parsed CLI namespace with attributes:
+              ``path`` (str), ``format`` (str), ``max_actions`` (int).
+
+      Returns:
+          Exit code: ``EXIT_OK`` (0), ``EXIT_IO_FAILURE`` (1),
+          ``EXIT_NO_USER_TURNS`` (2), or ``EXIT_NOT_JSONL`` (3).
+      """
+      path = Path(args.path)
+
+      # ── IO failure (exit 1) ──────────────────────────────────────────
+      try:
+          entries, non_blank_lines = read_transcript(path)
+      except OSError as exc:
+          print(
+              f"session-summary: cannot read transcript at '{path}': "
+              f"{type(exc).__name__}: {exc}",
+              file=sys.stderr,
+          )
+          return EXIT_IO_FAILURE
+
+      # ── Not JSONL (exit 3) ───────────────────────────────────────────
+      if not entries and non_blank_lines > 0:
+          print(
+              f"session-summary: transcript '{path}' is not valid JSONL",
+              file=sys.stderr,
+          )
+          return EXIT_NOT_JSONL
+
+      # ── No user turns (exit 2) ───────────────────────────────────────
+      has_user_turns = any(
+          entry.get("type") == "user"
+          and entry.get("userType") == "external"
+          for entry in entries
+      )
+      if not has_user_turns:
+          print(
+              f"session-summary: transcript '{path}' contains no user turns",
+              file=sys.stderr,
+          )
+          return EXIT_NO_USER_TURNS
+
+      # ── Success path (exit 0) ────────────────────────────────────────
+      summary = build_session_summary(path, max_actions=args.max_actions)
+
+      # Non-fatal warning: malformed lines were skipped.
+      # Re-derive the count from read_transcript (already called above).
+      skipped = non_blank_lines - len(entries)
+      if skipped > 0:
+          print(
+              f"session-summary: skipped {skipped} malformed line(s)"
+              f" in '{path}'",
+              file=sys.stderr,
+          )
+
+      if args.format == "json":
+          output = render_json(summary)
+      else:
+          output = render_text(summary)
+
+      # Exactly one trailing newline — the JSON/text contract.
+      print(output, flush=True)
+      return EXIT_OK
+  ```
+
+  > **Implementation note:** `build_session_summary` re-opens the file
+  > internally (as built in Phase 3). This double-read is intentional: keeping
+  > the validate-then-summarise separation clean is worth the negligible extra
+  > IO cost on transcript-sized files. If performance becomes a concern, a
+  > refactor can pass `entries` directly — that is a Task 0 non-goal for now.
+
+- [ ] **Step 4: Run → both new tests pass; run the full test file.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -v
+  ```
+
+  Expected: all tests pass, including all prior error-path tests and the two
+  new discipline tests.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): wire success path; implement render_json; stdout/stderr discipline
+
+  run() is now complete for all four exit codes. Success path calls
+  build_session_summary(), renders via render_json() or render_text()
+  (latter stubbed until Task 5.2), and prints exactly one trailing
+  newline. Non-fatal skipped-line warnings go to stderr only.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+## Phase 5 — Output formats
+
+---
+
+### Task 5.1 — `render_json`: key order, camelCase, and tri-state values
+
+**Files modified:**
+- `tests/test_session_summary.py`
+- `claude_usage/cli/session_summary.py`
+
+---
+
+- [ ] **Step 1: Write the tests.**
+
+  ```python
+  class TestRenderJson:
+      """Unit tests for render_json() and _summary_to_dict()."""
+
+      def _make_summary(
+          self,
+          stopped_naturally: bool | None = True,
+      ) -> SessionSummary:
+          """Factory for a minimal SessionSummary for render tests."""
+          return SessionSummary(
+              project="my-project",
+              intent="Test the renderer",
+              actions=["Edited foo.py", "Ran pytest"],
+              stopped_naturally=stopped_naturally,
+          )
+
+      def test_render_json_key_order_and_camelcase(self) -> None:
+          """Keys appear in contract order: project, intent, actions,
+          stoppedNaturally; camelCase is used for stoppedNaturally."""
+          summary = self._make_summary(stopped_naturally=True)
+          output = render_json(summary)
+          parsed = json.loads(output)
+          keys = list(parsed.keys())
+          assert keys == ["project", "intent", "actions", "stoppedNaturally"]
+
+      def test_render_json_indented_two_spaces(self) -> None:
+          """Output uses indent=2 (spec: pretty-printed)."""
+          summary = self._make_summary()
+          output = render_json(summary)
+          # A two-space-indented JSON will have lines like '  "project"'
+          assert '  "project"' in output
+
+      def test_render_json_no_trailing_whitespace_per_line(self) -> None:
+          """No line ends with trailing whitespace."""
+          summary = self._make_summary()
+          output = render_json(summary)
+          for line in output.splitlines():
+              assert line == line.rstrip(), (
+                  f"Trailing whitespace on line: {line!r}"
+              )
+
+      def test_render_json_handles_tri_state_true(self) -> None:
+          """stopped_naturally=True → JSON literal ``true``."""
+          output = render_json(self._make_summary(stopped_naturally=True))
+          assert '"stoppedNaturally": true' in output
+
+      def test_render_json_handles_tri_state_false(self) -> None:
+          """stopped_naturally=False → JSON literal ``false``."""
+          output = render_json(self._make_summary(stopped_naturally=False))
+          assert '"stoppedNaturally": false' in output
+
+      def test_render_json_handles_tri_state_none(self) -> None:
+          """stopped_naturally=None → JSON literal ``null``."""
+          output = render_json(self._make_summary(stopped_naturally=None))
+          assert '"stoppedNaturally": null' in output
+
+      def test_render_json_does_not_add_trailing_newline(self) -> None:
+          """render_json returns the bare document; run() adds the newline."""
+          output = render_json(self._make_summary())
+          assert not output.endswith("\n")
+  ```
+
+- [ ] **Step 2: Run → confirm results.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestRenderJson -v
+  ```
+
+  Many of these tests likely already pass from the Task 4.4 implementation.
+  If all pass, the tests still serve their purpose: they lock down the
+  invariants so a future refactor cannot break them silently.
+
+- [ ] **Step 3: Formalize `render_json` and `_summary_to_dict`.**
+
+  The implementations written in Task 4.4 are already correct. Confirm the
+  functions have full Google-style docstrings (added in Task 4.4). If any
+  docstring is missing, add it now. No logic changes are needed.
+
+  The finalised pair (duplicated here for clarity, since this is the task that
+  locks them down with tests):
+
+  ```python
+  def _summary_to_dict(summary: SessionSummary) -> dict:
+      """Convert a SessionSummary to an ordered dict matching the JSON contract.
+
+      Key order matches the spec: project → intent → actions →
+      stoppedNaturally.  Python 3.7+ preserves dict insertion order,
+      making ``json.dumps`` output deterministic across runs.
+
+      Args:
+          summary: The session summary dataclass instance to convert.
+
+      Returns:
+          An ordered dict with camelCase keys ready for ``json.dumps``.
+          Keys: ``project``, ``intent``, ``actions``,
+          ``stoppedNaturally``.
+      """
+      return {
+          "project": summary.project,
+          "intent": summary.intent,
+          "actions": summary.actions,
+          "stoppedNaturally": summary.stopped_naturally,
+      }
+
+
+  def render_json(summary: SessionSummary) -> str:
+      """Render a SessionSummary as a pretty-printed JSON string.
+
+      Produces the exact wire format consumed by the ``/whats-next``
+      skill.  Uses ``indent=2`` and ``ensure_ascii=False`` per spec.
+      Key order is deterministic: project, intent, actions,
+      stoppedNaturally.
+
+      Does **not** append a trailing newline — the caller (``run``)
+      adds exactly one before printing to stdout, ensuring the
+      stdout/stderr discipline invariant.
+
+      Args:
+          summary: The session summary dataclass instance.
+
+      Returns:
+          A JSON string without a trailing newline.
+      """
+      return json.dumps(
+          _summary_to_dict(summary), indent=2, ensure_ascii=False
+      )
+  ```
+
+- [ ] **Step 4: Run → all `TestRenderJson` tests pass; run full suite.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -v
+  ```
+
+  Expected: all tests pass.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  test(session-summary): lock down render_json key order, camelCase, tri-state
+
+  Seven unit tests cover: key ordering, two-space indent, no trailing
+  whitespace per line, and all three stoppedNaturally values (true /
+  false / null). render_json does not add a trailing newline — run()
+  owns that responsibility.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 5.2 — `render_text`: human-readable debug view
+
+**Files modified:**
+- `tests/test_session_summary.py`
+- `claude_usage/cli/session_summary.py`
+
+---
+
+- [ ] **Step 1: Write the failing tests.**
+
+  ```python
+  class TestRenderText:
+      """Unit tests for render_text() human-readable debug view."""
+
+      def _make_summary(
+          self,
+          stopped_naturally: bool | None = True,
+          actions: list[str] | None = None,
+      ) -> SessionSummary:
+          """Factory for SessionSummary instances used in render_text tests."""
+          return SessionSummary(
+              project="my-project",
+              intent="Build something useful",
+              actions=actions if actions is not None
+                  else ["Edited foo.py", "Ran pytest"],
+              stopped_naturally=stopped_naturally,
+          )
+
+      def test_render_text_happy_path(self) -> None:
+          """Full debug-view string matches expected template."""
+          summary = self._make_summary(stopped_naturally=True)
+          output = render_text(summary)
+          assert "Project: my-project" in output
+          assert "Intent: Build something useful" in output
+          assert "Stopped naturally: yes" in output
+          assert "Actions:" in output
+          assert "  - Edited foo.py" in output
+          assert "  - Ran pytest" in output
+
+      def test_render_text_stopped_naturally_true(self) -> None:
+          """True → 'yes'."""
+          output = render_text(self._make_summary(stopped_naturally=True))
+          assert "Stopped naturally: yes" in output
+
+      def test_render_text_stopped_naturally_false(self) -> None:
+          """False → 'no'."""
+          output = render_text(self._make_summary(stopped_naturally=False))
+          assert "Stopped naturally: no" in output
+
+      def test_render_text_stopped_naturally_none(self) -> None:
+          """None → 'unknown'."""
+          output = render_text(self._make_summary(stopped_naturally=None))
+          assert "Stopped naturally: unknown" in output
+
+      def test_render_text_empty_actions(self) -> None:
+          """Empty actions list → 'Actions:' section present, no bullets."""
+          summary = self._make_summary(actions=[])
+          output = render_text(summary)
+          assert "Actions:" in output
+          assert "  - " not in output
+  ```
+
+- [ ] **Step 2: Run → confirm all five tests fail.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestRenderText -v
+  ```
+
+  Expected: all fail with `NotImplementedError` from the Task 4.4 stub.
+
+- [ ] **Step 3: Implement `render_text` and `_tri_state_to_word`.**
+
+  ```python
+  def _tri_state_to_word(value: bool | None) -> str:
+      """Convert a tri-state boolean to a display word.
+
+      Args:
+          value: ``True``, ``False``, or ``None``.
+
+      Returns:
+          ``"yes"`` for ``True``, ``"no"`` for ``False``,
+          ``"unknown"`` for ``None``.
+      """
+      if value is True:
+          return "yes"
+      if value is False:
+          return "no"
+      return "unknown"
+
+
+  def render_text(summary: SessionSummary) -> str:
+      """Render a SessionSummary as a human-readable debug string.
+
+      Intended for ``--format text`` — not consumed by ``/whats-next``.
+      Useful for manual inspection and debugging.
+
+      Output template::
+
+          Project: {project}
+          Intent: {intent}
+          Stopped naturally: {yes|no|unknown}
+
+          Actions:
+            - {action 1}
+            - {action 2}
+            ...
+
+      Args:
+          summary: The session summary dataclass instance.
+
+      Returns:
+          Multi-line string.  Does not end with a trailing newline —
+          the caller (``run``) adds exactly one.
+      """
+      lines = [
+          f"Project: {summary.project}",
+          f"Intent: {summary.intent}",
+          f"Stopped naturally: {_tri_state_to_word(summary.stopped_naturally)}",
+          "",
+          "Actions:",
+      ]
+      for action in summary.actions:
+          lines.append(f"  - {action}")
+      return "\n".join(lines)
+  ```
+
+- [ ] **Step 4: Run → all five tests pass; run full suite.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -v
+  ```
+
+  Expected: all tests pass.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement render_text with tri-state word mapping
+
+  render_text() produces a human-readable debug view for --format text.
+  _tri_state_to_word() maps True/False/None → yes/no/unknown.
+  Five unit tests cover: happy path, each tri-state word, empty actions.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+## Phase 6 — Polish
+
+---
+
+### Task 6.1 — README update: document `session-summary` and CLI migration
+
+**Files modified:**
+- `README.md`
+
+---
+
+- [ ] **Step 1: Read the current README and identify the Usage section.**
+
+  The current README (as of plan authoring) has a `## Usage` section showing
+  `python -m claude_usage` invocations with bare flags. After the Phase 1
+  CLI refactor, those flags move under the `dashboard` subcommand.
+
+  Add the following content. Insert it **immediately after the existing
+  `## Usage` section**, before `## Dashboard`:
+
+  ````markdown
+  ## Subcommands
+
+  After the subparser refactor, all functionality is accessed through named
+  subcommands. Bare `claude-usage` prints help and exits 0.
+
+  ### `dashboard` — interactive HTML dashboard
+
+  ```bash
+  # Default: last 7 days, opens in browser
+  claude-usage dashboard
+
+  # Rolling window matching Claude billing buckets
+  claude-usage dashboard --window 5h
+  claude-usage dashboard --window 7d
+
+  # Custom date range
+  claude-usage dashboard --from 2026-04-01 --to 2026-04-09
+
+  # Output to file instead of opening browser
+  claude-usage dashboard --output report.html --no-open
+
+  # Custom Claude data directory
+  claude-usage dashboard --data-dir "D:\other\.claude"
+
+  # Set budget limits for gauge percentages
+  claude-usage dashboard --limit-5h 600000 --limit-7d 4000000 \
+      --limit-sonnet-7d 2000000
+
+  # Emit JSON (for scripting / CI)
+  claude-usage dashboard --format json
+  ```
+
+  All flags are unchanged from the pre-refactor form — only their location
+  moved (now under the `dashboard` subparser).
+
+  ### `session-summary` — deterministic session recap (new in v0.2.0)
+
+  Reads a single Claude Code transcript JSONL file and emits a structured
+  JSON summary suitable for consumption by the `/whats-next` skill or any
+  other tool that needs to know what a session did.
+
+  ```bash
+  claude-usage session-summary --path ~/.claude/projects/<hash>/<session>.jsonl
+  ```
+
+  **Flags:**
+
+  | Flag | Default | Description |
+  |---|---|---|
+  | `--path PATH` | *(required)* | Path to the transcript JSONL file |
+  | `--format {json,text}` | `json` | Output format. `json` is the machine-readable contract; `text` is a human-readable debug view |
+  | `--max-actions N` | `50` | Cap on emitted actions. `0` disables the cap |
+
+  **Sample output (`--format json`):**
+
+  ```json
+  {
+    "project": "claude-usage",
+    "intent": "Implement the session-summary subcommand for the /whats-next skill",
+    "actions": [
+      "Edited claude_usage/cli/session_summary.py",
+      "Created tests/test_session_summary.py",
+      "Ran pytest tests/test_session_summary.py -x",
+      "Dispatched code-reviewer sub-agent"
+    ],
+    "stoppedNaturally": true
+  }
+  ```
+
+  **Exit codes:**
+
+  | Code | Meaning | stderr |
+  |---|---|---|
+  | `0` | Success — JSON written to stdout | *(silent)* |
+  | `1` | IO failure reading `--path` (file missing, permission denied, etc.) | `session-summary: cannot read transcript at '<path>': <OSError class>: <message>` |
+  | `2` | File readable but contains no external user turns (empty session, zero-byte file, whitespace-only file) | `session-summary: transcript '<path>' contains no user turns` |
+  | `3` | File has content but none of it parses as JSONL | `session-summary: transcript '<path>' is not valid JSONL` |
+
+  On any non-zero exit, stdout is empty and stderr contains exactly one line.
+
+  ### Migration note
+
+  The old flag-only form **no longer works** after v0.2.0:
+
+  ```bash
+  # REMOVED — will print help and exit 0, not run the dashboard
+  claude-usage --format json
+
+  # CORRECT — migrate all callers to:
+  claude-usage dashboard --format json
+  ```
+
+  Any script, skill, or CI step that invokes `claude-usage` with bare flags
+  (no subcommand) must be updated to use `claude-usage dashboard [flags]`.
+  ````
+
+- [ ] **Step 2: Version bump in `pyproject.toml`.**
+
+  The project currently has `version = "0.1.0"`. The subparser refactor and
+  new subcommand constitute a minor-version change (new public interface,
+  backward-incompatible CLI change for bare-flag callers). Bump to `0.2.0`:
+
+  ```toml
+  version = "0.2.0"
+  ```
+
+- [ ] **Step 3: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add README.md pyproject.toml
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  docs: document session-summary subcommand and CLI migration in README
+
+  Adds Subcommands section covering dashboard and session-summary flags,
+  sample JSON output, exit-code table, and migration note for callers
+  using the pre-refactor bare-flag form. Bumps version to 0.2.0 to
+  signal the breaking CLI change.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 6.2 — Final verification: full suite green
+
+**Files modified:** none (verification only; small fixup commits if needed).
+
+---
+
+- [ ] **Step 1: Run the full test suite.**
+
+  ```bash
+  uv run pytest -v
+  ```
+
+  Expected: all tests pass — both pre-existing dashboard/aggregator tests and
+  all new `test_session_summary.py` tests. Zero failures, zero errors, zero
+  skips.
+
+  If any test fails, diagnose and fix in the same step before proceeding. If
+  the fix touches implementation files, commit with:
+  `fix(session-summary): <description> (part of #19)`.
+
+- [ ] **Step 2: Lint check.**
+
+  ```bash
+  uv run ruff check .
+  ```
+
+  Expected: zero errors. If any are found, fix inline:
+
+  ```bash
+  uv run ruff check --fix .
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add -u
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "chore: resolve ruff lint findings in session-summary module
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
+  ```
+
+- [ ] **Step 3: Format check.**
+
+  ```bash
+  uv run ruff format --check .
+  ```
+
+  Expected: zero diff. If a diff is reported:
+
+  ```bash
+  uv run ruff format .
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add -u
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "chore: apply ruff format to session-summary module
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
+  ```
+
+- [ ] **Step 4: Manual CLI sanity check.**
+
+  Run each of the following and confirm the described output:
+
+  ```bash
+  # 1. Bare invocation → help text, exit 0
+  uv run claude-usage
+  # Expected: usage/help text listing 'dashboard' and 'session-summary'
+  # subcommands. Exit 0.
+
+  # 2. Dashboard subcommand help → shows all dashboard flags
+  uv run claude-usage dashboard --help
+  # Expected: --data-dir, --from, --to, --window, --output, --no-open,
+  # --limit-5h, --limit-7d, --limit-sonnet-7d, --format listed.
+
+  # 3. Session-summary help → shows session-summary flags
+  uv run claude-usage session-summary --help
+  # Expected: --path (required), --format {json,text}, --max-actions.
+
+  # 4. Happy-path invocation → valid JSON on stdout, exit 0
+  uv run claude-usage session-summary \
+      --path tests/fixtures/session_summaries/happy_path.jsonl
+  # Expected: pretty-printed JSON with keys project, intent, actions,
+  # stoppedNaturally. No other text on stdout. Exit 0.
+
+  # 5. Missing-file invocation → one-line stderr, empty stdout, exit 1
+  uv run claude-usage session-summary --path /tmp/nonexistent.jsonl
+  # Expected: stdout empty, stderr = exactly one line containing
+  # "cannot read transcript at '/tmp/nonexistent.jsonl'". Exit 1.
+  ```
+
+- [ ] **Step 5: No-op commit gate.**
+
+  If Steps 1–3 required no fixes, no commit is needed. If fixes were made,
+  they are already committed per Steps 2–3 above. Either way, run a final
+  status check:
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan status
+  ```
+
+  Expected: "nothing to commit, working tree clean."
+
+---
+
+## Acceptance Criteria Coverage Matrix
+
+### Spec test matrix → plan tasks
+
+Every row from the spec's minimum test matrix (section "Testing → Minimum test
+matrix") maps to one or more plan tasks below. No row is unmapped.
+
+| Spec test ID | Fixture / scenario | Plan task(s) |
+|---|---|---|
+| `test_happy_path_emits_contract` | Real session with edits+bash+agent | 3.1 + 4.4 + 5.1 |
+| `test_missing_file_exits_1` | Nonexistent path | 4.1 |
+| `test_empty_session_exits_2` (first sub-case) | Agent-setting / system-only transcript | 4.2 |
+| `test_zero_byte_file_exits_2` (second sub-case, implicit) | Zero-byte file | 4.2 |
+| `test_whitespace_only_file_exits_2` (third sub-case, implicit) | Whitespace-only file | 4.2 |
+| `test_malformed_file_exits_3` | Non-blank lines, all unparseable | 4.3 |
+| `test_empty_is_not_exit_3` (guard) | Zero-byte file must exit 2 not 3 | 4.3 |
+| `test_existing_dashboard_unchanged` | CLI snapshot comparison | 1.1 + 1.2 + 0.1 |
+| `test_action_classification_skips_reads` | User turn + Read/Grep/Glob only | 3.3 |
+| `test_consecutive_edits_collapse` | 3 Edits to same file | 3.8 |
+| `test_intent_falls_back_for_slash_command_only` | Pure slash-command session | 3.5 |
+| `test_stopped_naturally_false_on_max_tokens` | Final stop_reason=max_tokens | 3.10 |
+| `test_stopped_naturally_false_on_prevented_continuation` | system entry with preventedContinuation=true | 3.10 |
+| `test_stopped_naturally_null_on_no_assistant_turns` | User turns, zero assistant entries | 3.11 |
+| `test_stopped_naturally_null_on_missing_stop_reason` | Final assistant entry lacks stop_reason | 3.11 |
+| `test_actions_truncated_at_default_cap` | Transcript > 50 distinct actions | 3.12 |
+| `test_actions_respects_max_actions_override` | Same, invoked with --max-actions 5 | 3.12 |
+| `test_actions_cap_zero_disables_truncation` | Same, invoked with --max-actions 0 | 3.12 |
+| `test_stdout_on_error_is_empty` | Missing-file path (exit 1) | 4.4 |
+| `test_stdout_on_success_is_pure_json` | Happy-path fixture | 4.4 |
+| `test_render_json_key_order_and_camelcase` | Constructed SessionSummary | 5.1 |
+| `test_render_json_handles_tri_state` (three variants) | True / False / None | 5.1 |
+| `test_render_text_happy_path` | Constructed SessionSummary | 5.2 |
+| `test_render_text_stopped_naturally_tri_state_words` (three variants) | yes / no / unknown | 5.2 |
+
+**No unmapped spec test rows.** All 17 spec test IDs (including the
+three sub-cases of `test_empty_session_exits_2`) are covered.
+
+---
+
+### Issue #19 acceptance criteria → plan tasks
+
+Every AC item from the spec's "Acceptance criteria (from issue #19)" section
+maps to one or more plan tasks below.
+
+| Issue #19 AC | Plan task(s) | Notes |
+|---|---|---|
+| `claude-usage session-summary --path <valid-jsonl> --format json` exits 0 and emits JSON matching contract | 3.1 + 4.4 + 5.1 | 3.1 builds the summary; 4.4 wires the success path and render_json call; 5.1 locks down key order and camelCase |
+| `claude-usage session-summary --path <missing>` exits 1 with one-line stderr | 4.1 + 4.4 | 4.1 implements read_transcript + exit-1 branch; 4.4 completes run() and tests stdout/stderr discipline |
+| `claude-usage session-summary --path <empty-session.jsonl>` exits 2 | 4.2 | Covers all three sub-cases: system-entries-only, zero-byte, whitespace-only |
+| `claude-usage session-summary --path <malformed.jsonl>` exits 3 | 4.3 | Includes guard test ensuring empty files do not exit 3 |
+| Existing CLI invocations (dashboard behavior) continue to work (modulo explicit migration to `dashboard` subcommand) | 0.1 + 1.1 + 1.2 | Phase 0 captures the pre-refactor snapshot; Phase 1 moves the dashboard body and verifies snapshot parity |
+| At least one test covers each exit code path | 4.1 (exit 1) + 4.2 (exit 2) + 4.3 (exit 3) + 4.4 (exit 0 success test) | Each exit code has a dedicated test class |
+| `/whats-next` produces a populated Recent Work section when run against a repo with no `save-context` file but a recent transcript | Post-merge consumer-side work (out of scope for this plan) | Tracked in spec section "Acceptance criteria" as "The last item is a consumer-side validation — testable only after the consumer's invocation path is migrated" |
+
+**No unmapped AC items.** Six of the seven ACs are covered by plan tasks;
+the seventh is explicitly deferred to consumer-side post-merge work as
+documented in the spec.
+
+---
+
+## Self-Review
+
+> This section records the results of the author's due-diligence pass
+> performed before committing the final plan document. The three checks below
+> correspond to the `superpowers:writing-plans` self-review requirements.
+
+### 1. Spec coverage
+
+Walk of the spec's section headings against plan tasks:
+
+| Spec section | Covered by |
+|---|---|
+| Context | Background / goal statement in plan header |
+| Goals (1–5) | Goals 1–3: Phase 1 + Phase 3; Goal 4: Phase 1; Goal 5: Phase 0 + Task 1.2 |
+| Non-goals | Acknowledged in Phase 0 note; no tasks contradict them |
+| CLI grammar (`dashboard` + `session-summary`) | Phase 1 (dashboard subparser), Phase 1 (session-summary subparser + flags) |
+| Grammar rules (no implicit default, old form removed, --format differences, --max-actions) | Tasks 1.1, 1.2, 3.12 |
+| Module layout (before / after) | Phase 1 + Phase 2 fixture/dataclass tasks |
+| Output contract (JSON shape, invariants) | Tasks 3.1 (happy path), 5.1 (render_json locks down shape) |
+| Key order and formatting | Task 5.1 |
+| Summarization pipeline (steps 1–7) | Tasks 3.2 (walk), 3.3–3.9 (classify/collapse/render), 3.10–3.11 (stopped_naturally), 3.5–3.6 (intent/project derivation) |
+| Tool-use classification table | Task 3.3 |
+| MCP tool name normalization | Task 3.7 |
+| Intent derivation (content extraction rules) | Task 3.5 |
+| Project derivation (cwd field) | Task 3.4 |
+| `stoppedNaturally` tri-state | Tasks 3.10, 3.11 |
+| Action collapse | Task 3.8 |
+| Action rendering (past-tense templates) | Task 3.9 |
+| `--max-actions` cap and sentinel | Task 3.12 |
+| Error handling & exit codes (all four codes) | Tasks 4.1, 4.2, 4.3, 4.4 |
+| stdout/stderr discipline | Task 4.4 |
+| Testing — fixture strategy | Phase 2 + Task 0.1 |
+| Testing — minimum test matrix (17 rows) | AC matrix above, all mapped |
+| Acceptance criteria (7 items) | AC matrix above, all mapped |
+
+**Spec coverage: complete — every section maps to one or more tasks (see AC
+matrix above).**
+
+### 2. Placeholder scan
+
+Searched the plan text for: `TBD`, `TODO`, `implement later`, `similar to`,
+`add appropriate`, `handle edge cases`.
+
+- **"implement later"** appears once as part of the `NotImplementedError`
+  message `"implemented in Task 5.2"` — this is intentional scaffolding
+  language inside a code block, not a deferred plan item. The actual
+  implementation is written in Task 5.2 immediately after.
+- **No other placeholder terms found.**
+
+**Placeholder scan: clean. No deferred or vague task bodies.**
+
+### 3. Type and name consistency scan
+
+Cross-check of all identifiers across every task against the Naming
+cross-reference table at the top of the plan:
+
+| Identifier | Declared in naming table | Used consistently | Notes |
+|---|---|---|---|
+| `ActionRecord` | Yes — `dataclass(frozen=True)` with `type`, `raw_tool`, `target`, `summary` | Tasks 3.3, 3.7, 3.8, 3.9 | Consistent |
+| `SessionSummary` | Yes — `dataclass(frozen=True)` with `project`, `intent`, `actions`, `stopped_naturally` | Tasks 3.1, 3.4–3.12, 4.4, 5.1, 5.2 | Consistent |
+| `build_session_summary` | `(path: Path, max_actions: int = 50) -> SessionSummary` | Task 3.1 (stub), 3.12 (final body), 4.4 (called in run) | Consistent |
+| `render_json` | `(summary: SessionSummary) -> str` | Tasks 4.4, 5.1 | Consistent |
+| `render_text` | `(summary: SessionSummary) -> str` | Tasks 4.4 (stub), 5.2 (impl) | Consistent |
+| `run` | `(args: argparse.Namespace) -> int` | Tasks 4.1–4.4 | Consistent |
+| `read_transcript` | Not in naming table (private helper, introduced Task 4.1) | Tasks 4.1, 4.2, 4.3, 4.4 | Signature `(path: Path) -> tuple[list[dict], int]` — stable across all tasks |
+| `_summary_to_dict` | Not in naming table (private helper, introduced Task 4.4) | Tasks 4.4, 5.1 | Signature `(summary: SessionSummary) -> dict` — consistent |
+| `_tri_state_to_word` | Not in naming table (private helper, introduced Task 5.2) | Task 5.2 | Signature `(value: bool \| None) -> str` — consistent |
+| `EXIT_OK`, `EXIT_IO_FAILURE`, `EXIT_NO_USER_TURNS`, `EXIT_NOT_JSONL` | Yes — `0`, `1`, `2`, `3` | Tasks 4.1–4.4, AC matrix | Consistent |
+| `stopped_naturally` (Python) → `stoppedNaturally` (JSON) | Yes — naming table explicitly documents the mapping | Tasks 3.11, 5.1 (`_summary_to_dict`), 5.2 (`_tri_state_to_word`) | Consistent |
+
+**Type/name consistency: clean. All public identifiers match the naming
+cross-reference. Three private helpers introduced in Phase 4–5 are
+internally consistent across all tasks that reference them.**
+
+### Self-review outcome
+
+All three checks pass:
+
+1. **Spec coverage: complete.** Every spec section heading maps to at least
+   one task. The AC matrix confirms full traceability in both directions
+   (spec test IDs → tasks, issue ACs → tasks).
+2. **Placeholder scan: clean.** One intentional `NotImplementedError` stub
+   message appears as planned scaffolding; no deferred or vague task bodies.
+3. **Type/name consistency: clean.** Ten identifiers (public + private)
+   checked; all are consistent across their declaring task and every
+   subsequent task that references them.
