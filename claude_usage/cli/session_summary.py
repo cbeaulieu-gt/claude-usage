@@ -14,6 +14,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,16 @@ EXIT_NO_USER_TURNS = 2
 EXIT_NOT_JSONL = 3
 
 DEFAULT_MAX_ACTIONS: int = 50
+
+_XML_WRAPPER_RE = re.compile(
+    r"<(system-reminder|command-message|command-name"
+    r"|command-args|local-command-stdout)>.*?</\1>",
+    flags=re.DOTALL,
+)
+_SLASH_COMMAND_RE = re.compile(
+    r"<command-name>(/[^<]+)</command-name>"
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[\.\!\?])\s|\n")
 
 
 @dataclass(frozen=True)
@@ -107,8 +118,64 @@ def _derive_project(entries: list[dict], slug_fallback: str | None = None) -> st
     return "unknown"
 
 
+def _extract_text_from_content(
+    content: str | list,
+) -> str:
+    """Extract plain text from a message content value.
+
+    Args:
+        content: Either a raw string or a list of content blocks. In the
+            list form, only blocks with ``type == "text"`` are included;
+            tool_result and other block types are skipped.
+
+    Returns:
+        A single string with all text joined by spaces, not yet stripped.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            block["text"]
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and "text" in block
+        ]
+        return " ".join(parts)
+    return ""
+
+
+def _first_sentence(text: str, max_chars: int = 200) -> str:
+    """Return the first sentence of text, capped at max_chars.
+
+    Splits on ". ", "! ", "? ", or a newline. If the first segment is
+    longer than max_chars, truncates at max_chars. Trailing punctuation
+    from the split is not included in the result.
+
+    Args:
+        text: Already-stripped input text.
+        max_chars: Maximum character count for the returned string.
+
+    Returns:
+        The first sentence or the first max_chars characters.
+    """
+    parts = _SENTENCE_SPLIT_RE.split(text, maxsplit=1)
+    sentence = parts[0].rstrip(". !?")
+    return sentence[:max_chars]
+
+
 def _derive_intent(entries: list[dict], project: str) -> str:
     """Derive the user's intent from the first external user turn.
+
+    Steps:
+    1. Find the first ``type: "user"`` + ``userType: "external"`` entry.
+    2. Extract text from ``message.content`` (string or list of blocks).
+    3. Strip the five XML wrapper tag families via regex.
+    4. Trim whitespace. If non-empty → take the first sentence (or 200
+       chars, whichever is shorter).
+    5. If empty, look for a ``<command-name>/<name></command-name>``
+       pattern in the original content → ``"Ran /<name>"``.
+    6. Final fallback → ``"Session on <project>"``.
 
     Args:
         entries: Parsed JSONL entries in file order.
@@ -117,11 +184,33 @@ def _derive_intent(entries: list[dict], project: str) -> str:
     Returns:
         A non-empty intent string.
     """
-    # Stub — returns hardcoded value matching happy_path fixture.
-    # Replaced by real logic in Task 3.3.
-    return (
-        "Implement the session-summary subcommand for the /whats-next skill"
-    )
+    for entry in entries:
+        if not (
+            entry.get("type") == "user"
+            and entry.get("userType") == "external"
+        ):
+            continue
+        msg = entry.get("message", {})
+        raw_content = msg.get("content", "")
+        original_text = _extract_text_from_content(raw_content)
+
+        # Strip XML wrappers.
+        stripped = _XML_WRAPPER_RE.sub("", original_text).strip()
+
+        if stripped:
+            return _first_sentence(stripped)
+
+        # Slash-command fallback.
+        m = _SLASH_COMMAND_RE.search(original_text)
+        if m:
+            return f"Ran {m.group(1)}"
+
+        # Generic fallback.
+        return f"Session on {project}"
+
+    # No external user turn found (should not reach here after LookupError
+    # guard in build_session_summary, but keep defensive).
+    return f"Session on {project}"
 
 
 def _collect_tool_uses(entries: list[dict]) -> list[ActionRecord]:

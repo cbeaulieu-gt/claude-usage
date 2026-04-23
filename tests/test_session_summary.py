@@ -164,3 +164,97 @@ class TestBuildSessionSummary:
             project_slug_fallback=None,
         )
         assert summary.project == "unknown"
+
+    def test_intent_plain_text_user_turn(self, tmp_path: pytest.TempPathFactory) -> None:
+        """A plain-text user turn returns the first sentence as intent."""
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = tmp_path / "plain_text.jsonl"
+        fixture.write_text(
+            json.dumps({
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": (
+                        "Implement the login feature. "
+                        "Make it work with OAuth."
+                    ),
+                },
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-plain",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.intent == "Implement the login feature"
+
+    def test_intent_strips_system_reminder_wrapper(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """system-reminder XML wrapper is stripped; surviving text becomes intent."""
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = tmp_path / "reminder.jsonl"
+        content = (
+            "<system-reminder>You are an assistant.</system-reminder>"
+            "Fix the parser bug in parser.py. It crashes on empty input."
+        )
+        fixture.write_text(
+            json.dumps({
+                "type": "user",
+                "message": {"role": "user", "content": content},
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-remind",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.intent == "Fix the parser bug in parser.py"
+
+    def test_intent_falls_back_for_slash_command_only(self) -> None:
+        """Pure slash-command session produces intent 'Ran /project-review'."""
+        from pathlib import Path
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = Path(
+            "tests/fixtures/session_summaries/slash_command_only.jsonl"
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.intent == "Ran /project-review"
+
+    def test_intent_empty_session_fallback(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """When there is a user turn but content is entirely whitespace after
+        stripping, intent falls back to 'Session on <project>'.
+        """
+        import json
+
+        from claude_usage.cli.session_summary import build_session_summary
+
+        fixture = tmp_path / "empty_intent.jsonl"
+        fixture.write_text(
+            json.dumps({
+                "type": "user",
+                "message": {"role": "user", "content": "   "},
+                "uuid": "u-001",
+                "timestamp": "2026-04-20T09:00:00.000Z",
+                "sessionId": "sess-empty-intent",
+                "userType": "external",
+                "cwd": "/home/user/myproject",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        summary = build_session_summary(_parse_fixture(fixture))
+        assert summary.intent == "Session on myproject"

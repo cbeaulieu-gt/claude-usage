@@ -1933,7 +1933,7 @@ step. No placeholders.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add four failing tests.**
+- [x] **Step 1: Add four failing tests.**
 
   Add to `TestBuildSessionSummary` in `tests/test_session_summary.py`:
 
@@ -2036,16 +2036,16 @@ step. No placeholders.
           assert summary.intent == "Session on myproject"
   ```
 
-- [ ] **Step 2: Run → confirm failures.**
+- [x] **Step 2: Run → confirm failures.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -k "intent" -x
   ```
 
   Expected: all four intent tests fail because `_derive_intent` returns a
-  hardcoded string.
+  hardcoded string. [confirmed: all 4 failed at red phase]
 
-- [ ] **Step 3: Implement `_derive_intent` with real logic.**
+- [x] **Step 3: Implement `_derive_intent` with real logic.**
 
   Replace the stub body of `_derive_intent` in `claude_usage/cli/session_summary.py`.
   Also add `import re` to the stdlib imports at the top of the file.
@@ -2162,7 +2162,7 @@ step. No placeholders.
       return f"Session on {project}"
   ```
 
-- [ ] **Step 4: Run → confirm pass.**
+- [x] **Step 4: Run → confirm pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -2170,7 +2170,7 @@ step. No placeholders.
 
   Expected: all tests pass, including all four new intent tests.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
