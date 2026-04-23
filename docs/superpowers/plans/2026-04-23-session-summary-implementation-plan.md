@@ -2796,4 +2796,1566 @@ step. No placeholders.
 
 ---
 
-<!-- PASS-2-END: next pass continues Phase 3 from Task 3.6 (agent_dispatch classification) onward -->
+### Task 3.6: Tool Classification — `Agent` → `agent_dispatch` Action
+
+> **Note:** Task 3.5 already added `test_action_classification_agent_dispatch`
+> and the `Agent` dispatch branch as part of the Bash+Agent step. This task
+> therefore serves as a **regression anchor** — verify the test that was
+> written there still passes under its canonical ID, and confirm the
+> `ActionRecord` contract fields exactly match what Tasks 3.7–3.12 will rely
+> on.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Confirm `test_action_classification_agent_dispatch` exists and
+  check its fixture contract.**
+
+  The test was written in Task 3.5 and lives in `TestToolClassification`. It
+  must assert all four `ActionRecord` fields. If the Task 3.5 version only
+  asserts the rendered summary string, extend it now to also assert the raw
+  record fields by calling `_collect_tool_uses` directly. Add the extended
+  assertion block shown below — it does not remove the existing summary-level
+  assertion, it adds a lower-level check:
+
+  ```python
+  def test_action_classification_agent_dispatch_record_fields(
+      self, tmp_path: pytest.TempPathFactory
+  ) -> None:
+      """Agent tool_use classifies to ActionRecord with correct field values.
+
+      Asserts all four ActionRecord fields explicitly:
+      - type == "agent_dispatch"
+      - raw_tool == "Agent"
+      - target == subagent_type value from input
+      - summary == "Dispatched <subagent_type> sub-agent"
+      """
+      import json
+      from pathlib import Path
+
+      from claude_usage.cli.session_summary import (
+          ActionRecord,
+          _collect_tool_uses,
+      )
+
+      # Minimal JSONL — one assistant entry with an Agent tool use.
+      entry = {
+          "type": "assistant",
+          "message": {
+              "role": "assistant",
+              "content": [{
+                  "type": "tool_use",
+                  "id": "tu-001",
+                  "name": "Agent",
+                  "input": {
+                      "subagent_type": "code-writer",
+                      "description": "Write the implementation",
+                  },
+              }],
+              "model": "claude-sonnet-4-6",
+              "stop_reason": "tool_use",
+              "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 15,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+              },
+          },
+          "uuid": "a-001",
+          "timestamp": "2026-04-20T09:00:01.000Z",
+          "sessionId": "sess-agent",
+      }
+      records = _collect_tool_uses([entry])
+
+      assert len(records) == 1
+      assert records[0] == ActionRecord(
+          type="agent_dispatch",
+          raw_tool="Agent",
+          target="code-writer",
+          summary="Dispatched code-writer sub-agent",
+      )
+  ```
+
+- [ ] **Step 2: Run → confirm both agent tests pass (green from Task 3.5).**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestToolClassification \
+      -k "agent_dispatch" -v
+  ```
+
+  Expected: both `test_action_classification_agent_dispatch` and
+  `test_action_classification_agent_dispatch_record_fields` pass. This is not
+  a red step — it is a contract-verification step.
+
+- [ ] **Step 3: Confirm the dispatch branch in `_classify_tool_use`.**
+
+  The Agent branch sits after the Bash/PowerShell block and before the final
+  `return None`. For reference, the surrounding context in the function
+  (showing where the Agent branch slots in):
+
+  ```python
+      # Bash / PowerShell.
+      if name in _BASH_TOOLS:
+          raw_command: str = inp.get("command", "")
+          collapsed_command = " ".join(raw_command.split())
+          if len(collapsed_command) > _MAX_COMMAND_CHARS:
+              rendered = collapsed_command[:_MAX_COMMAND_CHARS] + "…"
+          else:
+              rendered = collapsed_command
+          return ActionRecord(
+              type="bash",
+              raw_tool=name,
+              target=collapsed_command,
+              summary=f"Ran `{rendered}`",
+          )
+
+      # Agent dispatch.         ← This branch is from Task 3.5.
+      if name == "Agent":
+          subagent_type: str = inp.get("subagent_type", "unknown")
+          return ActionRecord(
+              type="agent_dispatch",
+              raw_tool=name,
+              target=subagent_type,
+              summary=f"Dispatched {subagent_type} sub-agent",
+          )
+
+      # MCP tools — implemented in Task 3.7 (below).
+      # "other" default — implemented in Task 3.9 (below).
+
+      return None   # ← temporary; removed once Task 3.9 adds the else branch
+  ```
+
+  No code change is needed here if Task 3.5 implemented the branch correctly.
+
+- [ ] **Step 4: Run full suite → confirm no regressions.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  test(session-summary): add agent_dispatch record-fields contract test
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 3.7: MCP Tool Classification with Normalization (Both Forms + Malformed Edge Case)
+
+This task implements the spec's "MCP tool name normalization" subsection in
+full. Both the plugin-scoped form (`mcp__plugin_<plugin>_<server>__<method>`)
+and the direct form (`mcp__<server>__<method>`) must normalize to the same
+`<server>.<method>` target so consecutive-collapse unifies them. A malformed
+name (prefix present but structural separators absent) falls through to the
+`other` action class defined in Task 3.9.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Add four tests to `TestToolClassification`.**
+
+  ```python
+      def test_action_classification_mcp_plugin_scoped(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """Plugin-scoped MCP name normalizes to 'github.create_issue'.
+
+          Raw: mcp__plugin_github_github__create_issue
+          Expected target: "github.create_issue"
+          Expected summary: "Called `github.create_issue` (MCP)"
+          """
+          import json
+
+          from claude_usage.cli.session_summary import (
+              ActionRecord,
+              _collect_tool_uses,
+          )
+
+          raw_name = "mcp__plugin_github_github__create_issue"
+          entry = {
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-001",
+                      "name": raw_name,
+                      "input": {"title": "Test issue", "body": "body"},
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "tool_use",
+                  "usage": {
+                      "input_tokens": 60,
+                      "output_tokens": 20,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-001",
+              "timestamp": "2026-04-20T09:00:01.000Z",
+              "sessionId": "sess-mcp",
+          }
+          records = _collect_tool_uses([entry])
+
+          assert len(records) == 1
+          assert records[0] == ActionRecord(
+              type="mcp",
+              raw_tool=raw_name,
+              target="github.create_issue",
+              summary="Called `github.create_issue` (MCP)",
+          )
+
+      def test_action_classification_mcp_direct(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """Direct MCP name normalizes to 'azure.storage'.
+
+          Raw: mcp__azure__storage
+          Expected target: "azure.storage"
+          Expected summary: "Called `azure.storage` (MCP)"
+          """
+          import json
+
+          from claude_usage.cli.session_summary import (
+              ActionRecord,
+              _collect_tool_uses,
+          )
+
+          raw_name = "mcp__azure__storage"
+          entry = {
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-001",
+                      "name": raw_name,
+                      "input": {"container": "my-bucket"},
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "tool_use",
+                  "usage": {
+                      "input_tokens": 40,
+                      "output_tokens": 10,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-001",
+              "timestamp": "2026-04-20T09:00:01.000Z",
+              "sessionId": "sess-mcp-direct",
+          }
+          records = _collect_tool_uses([entry])
+
+          assert len(records) == 1
+          assert records[0] == ActionRecord(
+              type="mcp",
+              raw_tool=raw_name,
+              target="azure.storage",
+              summary="Called `azure.storage` (MCP)",
+          )
+
+      def test_action_classification_mcp_malformed_falls_back_to_other(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """Malformed MCP name (no second __ separator) falls back to 'other'.
+
+          Raw: mcp__plugin_broken
+          The name starts with 'mcp__' and 'plugin_' but has no '__' after
+          the plugin segment, so normalization returns None. The forward-compat
+          fallback produces an 'other'-type ActionRecord.
+          """
+          import json
+
+          from claude_usage.cli.session_summary import (
+              ActionRecord,
+              _collect_tool_uses,
+          )
+
+          raw_name = "mcp__plugin_broken"
+          entry = {
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-001",
+                      "name": raw_name,
+                      "input": {},
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "tool_use",
+                  "usage": {
+                      "input_tokens": 10,
+                      "output_tokens": 5,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-001",
+              "timestamp": "2026-04-20T09:00:01.000Z",
+              "sessionId": "sess-mcp-bad",
+          }
+          records = _collect_tool_uses([entry])
+
+          assert len(records) == 1
+          assert records[0] == ActionRecord(
+              type="other",
+              raw_tool=raw_name,
+              target=raw_name,
+              summary=f"Used {raw_name} tool",
+          )
+
+      def test_action_classification_mcp_collapse_unifies_forms(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """Plugin-scoped and direct MCP forms for the same endpoint normalize
+          to an identical target string, so consecutive occurrences collapse.
+
+          Two consecutive tool uses — one plugin-scoped, one direct — both
+          resolve to target "github.create_issue". After _collect_tool_uses
+          (which includes collapse), only one ActionRecord is returned.
+          """
+          import json
+
+          from claude_usage.cli.session_summary import _collect_tool_uses
+
+          plugin_entry = {
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-001",
+                      "name": "mcp__plugin_github_github__create_issue",
+                      "input": {"title": "First", "body": "b1"},
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "tool_use",
+                  "usage": {
+                      "input_tokens": 60,
+                      "output_tokens": 20,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-001",
+              "timestamp": "2026-04-20T09:00:01.000Z",
+              "sessionId": "sess-mcp-collapse",
+          }
+          direct_entry = {
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-002",
+                      "name": "mcp__github__create_issue",
+                      "input": {"title": "Second", "body": "b2"},
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "tool_use",
+                  "usage": {
+                      "input_tokens": 65,
+                      "output_tokens": 20,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-002",
+              "timestamp": "2026-04-20T09:00:02.000Z",
+              "sessionId": "sess-mcp-collapse",
+          }
+          records = _collect_tool_uses([plugin_entry, direct_entry])
+
+          # Both normalize to the same target → collapse reduces to one.
+          assert len(records) == 1
+          assert records[0].target == "github.create_issue"
+  ```
+
+- [ ] **Step 2: Run → confirm all four tests fail.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestToolClassification \
+      -k "mcp" -v
+  ```
+
+  Expected: all four MCP tests fail. The `_classify_tool_use` function
+  currently falls through to `return None` for any `mcp__*` name — the MCP
+  branch does not yet exist.
+
+- [ ] **Step 3: Implement `_normalize_mcp_tool_name` and the MCP dispatch
+  branch.**
+
+  Add the helper function at module level in `claude_usage/cli/session_summary.py`,
+  before `_classify_tool_use`. Show the full helper verbatim:
+
+  ```python
+  def _normalize_mcp_tool_name(raw: str) -> str | None:
+      """Normalize an MCP tool name to '<server>.<method>'.
+
+      Handles both forms:
+      - Plugin-scoped: ``mcp__plugin_<plugin>_<server>__<method>``
+        e.g. ``mcp__plugin_github_github__create_issue`` → ``github.create_issue``
+      - Direct: ``mcp__<server>__<method>``
+        e.g. ``mcp__azure__storage`` → ``azure.storage``
+
+      Returns None when the name is malformed (starts with ``mcp__`` but
+      does not contain the expected structural separators after stripping
+      the plugin segment), so the caller can fall back to the ``other``
+      action class. This provides forward-compatibility when new MCP naming
+      conventions appear in future Claude Code versions.
+
+      Args:
+          raw: The raw tool name from the transcript.
+
+      Returns:
+          A normalised ``<server>.<method>`` string, or None if the name
+          is structurally malformed.
+      """
+      if not raw.startswith("mcp__"):
+          return None
+      remainder = raw[len("mcp__"):]
+
+      # Strip the plugin segment if present.
+      # Plugin form: plugin_<plugin>_<server>__<method>
+      # After stripping "plugin_", the next segment is "<plugin>_<server>"
+      # which is separated from <method> by "__".
+      if remainder.startswith("plugin_"):
+          after_plugin = remainder[len("plugin_"):]
+          # after_plugin is "<plugin>_<server>__<method>" — split once on "_"
+          # to skip the plugin label, leaving "<server>__<method>".
+          parts = after_plugin.split("_", 1)
+          if len(parts) < 2:
+              return None  # Malformed: nothing after plugin label.
+          remainder = parts[1]
+
+      # remainder is now "<server>__<method>" for both forms.
+      if "__" not in remainder:
+          return None  # Malformed: no method separator.
+      server, _, method = remainder.partition("__")
+      if not server or not method:
+          return None  # Malformed: empty server or method.
+      return f"{server}.{method}"
+  ```
+
+  Then extend `_classify_tool_use` — insert the MCP branch immediately after
+  the Agent branch and before the temporary `return None`. Show the insertion
+  point with surrounding context:
+
+  ```python
+      # Agent dispatch.
+      if name == "Agent":
+          subagent_type: str = inp.get("subagent_type", "unknown")
+          return ActionRecord(
+              type="agent_dispatch",
+              raw_tool=name,
+              target=subagent_type,
+              summary=f"Dispatched {subagent_type} sub-agent",
+          )
+
+      # MCP tools — both plugin-scoped and direct forms.
+      if name.startswith("mcp__"):
+          normalised = _normalize_mcp_tool_name(name)
+          if normalised is not None:
+              return ActionRecord(
+                  type="mcp",
+                  raw_tool=name,
+                  target=normalised,
+                  summary=f"Called `{normalised}` (MCP)",
+              )
+          # Malformed MCP name — fall through to the "other" default below.
+          # Do NOT return None here; let the catch-all produce an ActionRecord.
+          return ActionRecord(
+              type="other",
+              raw_tool=name,
+              target=name,
+              summary=f"Used {name} tool",
+          )
+
+      # "other" default — implemented in Task 3.9.
+      return None   # temporary; replaced in Task 3.9
+  ```
+
+  > **Implementation note:** the malformed MCP case returns an `other`
+  > ActionRecord inline here (rather than falling through to the catch-all)
+  > because the `name.startswith("mcp__")` guard is already true — the
+  > catch-all in Task 3.9 will never be reached for an `mcp__*` name. This
+  > is intentional and matches the spec's forward-compat requirement.
+
+- [ ] **Step 4: Run → confirm all four MCP tests pass.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass including all four new MCP tests. Existing tests
+  are unaffected.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement MCP tool classification with name normalization
+
+  Handles both plugin-scoped (mcp__plugin_<p>_<s>__<m>) and direct
+  (mcp__<s>__<m>) forms. Malformed names fall back to 'other' class for
+  forward compatibility. Consecutive calls to the same normalized endpoint
+  collapse into one action.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 3.8: Tool Classification — Skip Rules
+
+The full skip set is `{"Read", "Grep", "Glob", "Skill", "TodoWrite",
+"WebFetch", "WebSearch"}`. This task verifies the set is enforced as a
+module-level constant and that `test_action_classification_skips_reads`
+(written in Task 3.4) covers every member. It also adds a test that confirms
+a mix of skipped tools plus one `Edit` call produces exactly one action — the
+Edit.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Add `test_action_classification_skip_set_is_complete` to
+  `TestToolClassification`.**
+
+  ```python
+      def test_action_classification_skip_set_is_complete(self) -> None:
+          """The SKIPPED_TOOLS module constant contains all seven skip-list members.
+
+          This test is a contract assertion on the constant itself. If a new
+          tool is added to or removed from the skip list in the spec, this
+          test must be updated in lockstep.
+          """
+          from claude_usage.cli.session_summary import SKIPPED_TOOLS
+
+          expected = frozenset({
+              "Read",
+              "Grep",
+              "Glob",
+              "Skill",
+              "TodoWrite",
+              "WebFetch",
+              "WebSearch",
+          })
+          assert SKIPPED_TOOLS == expected
+
+      def test_action_classification_skips_mix_with_edit(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """Seven skipped tool uses plus one Edit produces exactly one action.
+
+          Verifies that the skip-set check fires before any other dispatch,
+          that the Edit is still classified after skipped tools, and that the
+          resulting action list has exactly one entry.
+          """
+          import json
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          skip_tools = [
+              ("Read", {"file_path": "foo.py"}),
+              ("Grep", {"pattern": "def ", "path": "."}),
+              ("Glob", {"pattern": "**/*.py"}),
+              ("WebFetch", {"url": "https://example.com"}),
+              ("WebSearch", {"query": "python"}),
+              ("Skill", {"skill": "python"}),
+              ("TodoWrite", {"todos": []}),
+          ]
+
+          lines = [
+              json.dumps({
+                  "type": "user",
+                  "message": {
+                      "role": "user",
+                      "content": "Look at things, then edit one.",
+                  },
+                  "uuid": "u-001",
+                  "timestamp": "2026-04-20T09:00:00.000Z",
+                  "sessionId": "sess-mix",
+                  "userType": "external",
+                  "cwd": "/home/user/myproject",
+              }),
+          ]
+          for i, (tool_name, inp) in enumerate(skip_tools, start=1):
+              lines.append(json.dumps({
+                  "type": "assistant",
+                  "message": {
+                      "role": "assistant",
+                      "content": [{
+                          "type": "tool_use",
+                          "id": f"tu-{i:03d}",
+                          "name": tool_name,
+                          "input": inp,
+                      }],
+                      "model": "claude-sonnet-4-6",
+                      "stop_reason": "tool_use",
+                      "usage": {
+                          "input_tokens": 20,
+                          "output_tokens": 5,
+                          "cache_creation_input_tokens": 0,
+                          "cache_read_input_tokens": 0,
+                      },
+                  },
+                  "uuid": f"a-{i:03d}",
+                  "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
+                  "sessionId": "sess-mix",
+              }))
+          # One Edit at the end — must survive into the action list.
+          lines.append(json.dumps({
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-008",
+                      "name": "Edit",
+                      "input": {
+                          "file_path": "src/result.py",
+                          "old_string": "x",
+                          "new_string": "y",
+                      },
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "end_turn",
+                  "usage": {
+                      "input_tokens": 20,
+                      "output_tokens": 5,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-008",
+              "timestamp": "2026-04-20T09:00:08.000Z",
+              "sessionId": "sess-mix",
+          }))
+
+          fixture = tmp_path / "skip_mix.jsonl"
+          fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          summary = build_session_summary(fixture)
+          assert len(summary.actions) == 1
+          assert summary.actions[0] == "Edited src/result.py"
+  ```
+
+- [ ] **Step 2: Run → confirm failures.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestToolClassification \
+      -k "skip_set_is_complete or skips_mix_with_edit" -v
+  ```
+
+  Expected: `test_action_classification_skip_set_is_complete` fails because
+  the module exports `_SKIP_TOOLS` (private, underscore prefix from Task 3.4)
+  but not `SKIPPED_TOOLS` (public, no underscore). The mix test passes if the
+  skip logic is correct from Task 3.4.
+
+- [ ] **Step 3: Rename the private constant to the public name and ensure it
+  is exported.**
+
+  In `claude_usage/cli/session_summary.py`, rename `_SKIP_TOOLS` to
+  `SKIPPED_TOOLS` everywhere it appears (module constant definition and the
+  guard inside `_classify_tool_use`). The `_EDIT_TOOLS` and `_BASH_TOOLS`
+  constants remain private (they are implementation details; callers do not
+  need them).
+
+  Find and replace `_SKIP_TOOLS` with `SKIPPED_TOOLS` throughout the file.
+  The guard inside `_classify_tool_use` becomes:
+
+  ```python
+      # Skip list — info-gathering and ceremony.
+      if name in SKIPPED_TOOLS:
+          return None
+  ```
+
+  And the module-level constant declaration becomes:
+
+  ```python
+  SKIPPED_TOOLS: frozenset[str] = frozenset({
+      "Read",
+      "Grep",
+      "Glob",
+      "WebFetch",
+      "WebSearch",
+      "Skill",
+      "TodoWrite",
+  })
+  ```
+
+- [ ] **Step 4: Run → confirm all tests pass.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass. `test_action_classification_skip_set_is_complete`
+  now finds the public `SKIPPED_TOOLS` constant and the frozenset matches.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): expose SKIPPED_TOOLS as public constant; add skip-set completeness test
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 3.9: Tool Classification — `other` Default-Include for Unknown Tools
+
+Any tool name that is not in `SKIPPED_TOOLS`, not in `_EDIT_TOOLS`, not in
+`_BASH_TOOLS`, and not handled by the Agent or MCP branches falls through to
+the "other" catch-all. This preserves forward compatibility when Claude Code
+introduces new tool names.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Add `test_action_classification_unknown_tool_defaults_to_other`.**
+
+  ```python
+      def test_action_classification_unknown_tool_defaults_to_other(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """An unrecognised tool name produces an 'other'-type ActionRecord.
+
+          This verifies the forward-compatibility catch-all: any tool that
+          does not match the skip list, edit family, bash family, Agent, or
+          MCP prefix produces:
+          - type == "other"
+          - raw_tool == the original tool name
+          - target == the original tool name
+          - summary == "Used <tool_name> tool"
+          """
+          import json
+
+          from claude_usage.cli.session_summary import (
+              ActionRecord,
+              _collect_tool_uses,
+          )
+
+          entry = {
+              "type": "assistant",
+              "message": {
+                  "role": "assistant",
+                  "content": [{
+                      "type": "tool_use",
+                      "id": "tu-001",
+                      "name": "BrandNewTool",
+                      "input": {"some_param": "some_value"},
+                  }],
+                  "model": "claude-sonnet-4-6",
+                  "stop_reason": "tool_use",
+                  "usage": {
+                      "input_tokens": 10,
+                      "output_tokens": 5,
+                      "cache_creation_input_tokens": 0,
+                      "cache_read_input_tokens": 0,
+                  },
+              },
+              "uuid": "a-001",
+              "timestamp": "2026-04-20T09:00:01.000Z",
+              "sessionId": "sess-unknown",
+          }
+          records = _collect_tool_uses([entry])
+
+          assert len(records) == 1
+          assert records[0] == ActionRecord(
+              type="other",
+              raw_tool="BrandNewTool",
+              target="BrandNewTool",
+              summary="Used BrandNewTool tool",
+          )
+  ```
+
+- [ ] **Step 2: Run → confirm failure.**
+
+  ```bash
+  uv run pytest \
+      "tests/test_session_summary.py::TestToolClassification::test_action_classification_unknown_tool_defaults_to_other" \
+      -v
+  ```
+
+  Expected: failure. `_collect_tool_uses` currently returns zero records for
+  `"BrandNewTool"` because the temporary `return None` at the end of
+  `_classify_tool_use` discards it.
+
+- [ ] **Step 3: Replace the temporary `return None` with the `other` catch-all.**
+
+  In `claude_usage/cli/session_summary.py`, locate the line `return None` at
+  the very end of `_classify_tool_use` (the one added as a placeholder in
+  Task 3.4 and retained through Tasks 3.5–3.7). Replace it with the `other`
+  ActionRecord. Show the full `_classify_tool_use` function as it now stands —
+  this is the complete assembly of all branches from Tasks 3.4, 3.5, 3.7, and
+  3.9, with a Google-style docstring:
+
+  ```python
+  def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
+      """Classify a single tool-use content block into an ActionRecord.
+
+      Returns None only for tools in SKIPPED_TOOLS (info-gathering,
+      skill enablers, ceremony). Every other tool name produces an
+      ActionRecord — either a typed record for known tools or an
+      ``other``-type record for forward compatibility with unknown tools.
+
+      Classification priority:
+      1. Skip list (SKIPPED_TOOLS) — return None immediately.
+      2. Edit family (_EDIT_TOOLS) — return "edit" ActionRecord.
+      3. Bash/PowerShell family (_BASH_TOOLS) — return "bash" ActionRecord.
+      4. Agent dispatch — return "agent_dispatch" ActionRecord.
+      5. MCP tools (mcp__* prefix) — normalise name; return "mcp" on success,
+         "other" on malformed name.
+      6. Catch-all — return "other" ActionRecord for forward compatibility.
+
+      Args:
+          tool_use: A content block dict with ``type == "tool_use"``.
+
+      Returns:
+          An ActionRecord, or None if this tool use is in the skip list.
+      """
+      name: str = tool_use.get("name", "")
+      inp: dict = tool_use.get("input", {})
+
+      # 1. Skip list — info-gathering and ceremony.
+      if name in SKIPPED_TOOLS:
+          return None
+
+      # 2. Edit family.
+      if name in _EDIT_TOOLS:
+          target = inp.get("file_path", "")
+          return ActionRecord(
+              type="edit",
+              raw_tool=name,
+              target=target,
+              summary=f"Edited {target}",
+          )
+
+      # 3. Bash / PowerShell.
+      if name in _BASH_TOOLS:
+          raw_command: str = inp.get("command", "")
+          collapsed_command = " ".join(raw_command.split())
+          if len(collapsed_command) > _MAX_COMMAND_CHARS:
+              rendered = collapsed_command[:_MAX_COMMAND_CHARS] + "…"
+          else:
+              rendered = collapsed_command
+          return ActionRecord(
+              type="bash",
+              raw_tool=name,
+              target=collapsed_command,
+              summary=f"Ran `{rendered}`",
+          )
+
+      # 4. Agent dispatch.
+      if name == "Agent":
+          subagent_type: str = inp.get("subagent_type", "unknown")
+          return ActionRecord(
+              type="agent_dispatch",
+              raw_tool=name,
+              target=subagent_type,
+              summary=f"Dispatched {subagent_type} sub-agent",
+          )
+
+      # 5. MCP tools — both plugin-scoped and direct forms.
+      if name.startswith("mcp__"):
+          normalised = _normalize_mcp_tool_name(name)
+          if normalised is not None:
+              return ActionRecord(
+                  type="mcp",
+                  raw_tool=name,
+                  target=normalised,
+                  summary=f"Called `{normalised}` (MCP)",
+              )
+          # Malformed MCP name — treat as "other" (forward-compat safety).
+          return ActionRecord(
+              type="other",
+              raw_tool=name,
+              target=name,
+              summary=f"Used {name} tool",
+          )
+
+      # 6. Catch-all — default-include unknown tools for forward compatibility.
+      return ActionRecord(
+          type="other",
+          raw_tool=name,
+          target=name,
+          summary=f"Used {name} tool",
+      )
+  ```
+
+- [ ] **Step 4: Run → confirm all tests pass.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass. The `other` catch-all now handles `"BrandNewTool"`
+  and any future unknown tool names.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): add other catch-all branch to _classify_tool_use
+
+  Unknown tool names now produce an 'other'-type ActionRecord instead of
+  being silently dropped. This is the forward-compatibility default-include
+  rule from the spec.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 3.10: Collapse Rule — Consecutive Same `(type, target)` Deduplication
+
+The `_collapse_consecutive` helper was introduced in Task 3.4 as part of
+`_collect_tool_uses`. This task adds the full collapse contract tests
+(including the non-adjacent semantics) and verifies them end-to-end through
+`build_session_summary` using the committed fixture files from Phase 2.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Add two tests — `test_consecutive_edits_collapse` and
+  `test_non_adjacent_edits_do_not_collapse`.**
+
+  ```python
+  class TestCollapseConsecutive:
+      """Tests for _collapse_consecutive semantics."""
+
+      def test_consecutive_edits_collapse(self) -> None:
+          """Three consecutive Edits to the same file collapse to one action.
+
+          Uses the consecutive_edits_same_file.jsonl fixture from Phase 2
+          which has three Edit tool-use blocks all targeting
+          'claude_usage/parser.py'. After _collect_tool_uses (which calls
+          _collapse_consecutive internally), only one ActionRecord remains.
+          """
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/"
+              "consecutive_edits_same_file.jsonl"
+          )
+          summary = build_session_summary(fixture)
+
+          assert len(summary.actions) == 1
+          assert summary.actions[0] == "Edited claude_usage/parser.py"
+
+      def test_non_adjacent_edits_do_not_collapse(
+          self, tmp_path: pytest.TempPathFactory
+      ) -> None:
+          """Edits interleaved by a different file are not collapsed.
+
+          Sequence: Edit A → Edit B → Edit A again.
+          The two Edit A calls are non-adjacent, so all three records are
+          preserved — chronological order and narrative sense are maintained.
+          """
+          import json
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          def _edit_entry(uid: str, file_path: str, seq: int) -> dict:
+              """Build one assistant entry with a single Edit tool use."""
+              return {
+                  "type": "assistant",
+                  "message": {
+                      "role": "assistant",
+                      "content": [{
+                          "type": "tool_use",
+                          "id": f"tu-{seq:03d}",
+                          "name": "Edit",
+                          "input": {
+                              "file_path": file_path,
+                              "old_string": f"old{seq}",
+                              "new_string": f"new{seq}",
+                          },
+                      }],
+                      "model": "claude-sonnet-4-6",
+                      "stop_reason": (
+                          "end_turn" if seq == 3 else "tool_use"
+                      ),
+                      "usage": {
+                          "input_tokens": 30,
+                          "output_tokens": 10,
+                          "cache_creation_input_tokens": 0,
+                          "cache_read_input_tokens": 0,
+                      },
+                  },
+                  "uuid": uid,
+                  "timestamp": f"2026-04-20T09:00:0{seq}.000Z",
+                  "sessionId": "sess-nonadj",
+              }
+
+          user_entry = {
+              "type": "user",
+              "message": {
+                  "role": "user",
+                  "content": "Edit A, then B, then A again.",
+              },
+              "uuid": "u-001",
+              "timestamp": "2026-04-20T09:00:00.000Z",
+              "sessionId": "sess-nonadj",
+              "userType": "external",
+              "cwd": "/home/user/myproject",
+          }
+
+          lines = [
+              json.dumps(user_entry),
+              json.dumps(_edit_entry("a-001", "src/a.py", 1)),
+              json.dumps(_edit_entry("a-002", "src/b.py", 2)),
+              json.dumps(_edit_entry("a-003", "src/a.py", 3)),
+          ]
+          fixture = tmp_path / "non_adjacent.jsonl"
+          fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          summary = build_session_summary(fixture)
+
+          # All three edits must be present — none collapsed.
+          assert len(summary.actions) == 3
+          assert summary.actions[0] == "Edited src/a.py"
+          assert summary.actions[1] == "Edited src/b.py"
+          assert summary.actions[2] == "Edited src/a.py"
+  ```
+
+- [ ] **Step 2: Run → confirm both tests pass (green from Task 3.4).**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestCollapseConsecutive -v
+  ```
+
+  Expected: both tests pass. `_collapse_consecutive` was already implemented
+  correctly in Task 3.4. This step is a contract-verification step, not a red
+  step.
+
+  If either test fails, the collapse logic from Task 3.4 is incorrect. Debug
+  by inspecting `_collapse_consecutive` — the most likely cause is the
+  function using global dedupe rather than consecutive-only dedupe. The correct
+  implementation is:
+
+  ```python
+  def _collapse_consecutive(
+      records: list[ActionRecord],
+  ) -> list[ActionRecord]:
+      """Drop consecutive ActionRecords sharing the same (type, target) pair.
+
+      Non-adjacent duplicates are preserved to maintain the narrative sense
+      of 'X, then Y, then X again'. No global deduplication is performed.
+
+      Args:
+          records: Chronologically ordered list of ActionRecords.
+
+      Returns:
+          A new list with no two adjacent records sharing identical
+          (type, target). Input order is otherwise preserved.
+      """
+      collapsed: list[ActionRecord] = []
+      for rec in records:
+          if (
+              collapsed
+              and collapsed[-1].type == rec.type
+              and collapsed[-1].target == rec.target
+          ):
+              continue
+          collapsed.append(rec)
+      return collapsed
+  ```
+
+  Verify this is what `session_summary.py` contains. If it differs, correct
+  it and re-run.
+
+- [ ] **Step 3: Run full suite → confirm no regressions.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass.
+
+- [ ] **Step 4: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  test(session-summary): add collapse contract tests (consecutive and non-adjacent)
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 3.11: `stoppedNaturally` Tri-State Derivation
+
+This is the tri-state `bool | None` semantic defined in the spec's
+"stoppedNaturally derivation — tri-state" subsection. The spec's resolution
+table is the authoritative source. Five tests map one-to-one to the five
+resolution-table rows that produce deterministic outcomes.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Add five tests to a new `TestStoppedNaturally` class.**
+
+  ```python
+  class TestStoppedNaturally:
+      """Tests for _derive_stopped_naturally tri-state resolution."""
+
+      def test_stopped_naturally_true_on_end_turn(self) -> None:
+          """stop_reason 'end_turn' with no prevented-continuation → True."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/happy_path.jsonl"
+          )
+          summary = build_session_summary(fixture)
+          assert summary.stopped_naturally is True
+
+      def test_stopped_naturally_false_on_max_tokens(self) -> None:
+          """stop_reason 'max_tokens' → False (definitive interrupt)."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/max_tokens_stop.jsonl"
+          )
+          summary = build_session_summary(fixture)
+          assert summary.stopped_naturally is False
+
+      def test_stopped_naturally_false_on_prevented_continuation(self) -> None:
+          """preventedContinuation: true in stop_hook_summary → False."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/prevented_continuation.jsonl"
+          )
+          summary = build_session_summary(fixture)
+          assert summary.stopped_naturally is False
+
+      def test_stopped_naturally_null_on_no_assistant_turns(self) -> None:
+          """Zero assistant entries → None (nothing to judge)."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/no_assistant_entries.jsonl"
+          )
+          summary = build_session_summary(fixture)
+          assert summary.stopped_naturally is None
+
+      def test_stopped_naturally_null_on_missing_stop_reason(self) -> None:
+          """Last assistant entry has no stop_reason key → None (signal absent)."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/missing_stop_reason.jsonl"
+          )
+          summary = build_session_summary(fixture)
+          assert summary.stopped_naturally is None
+  ```
+
+- [ ] **Step 2: Run → confirm failures.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestStoppedNaturally -v
+  ```
+
+  Expected: most tests fail because `_derive_stopped_naturally` currently
+  returns the hardcoded stub value `True` from Task 3.1. The
+  `test_stopped_naturally_true_on_end_turn` test may pass accidentally through
+  the stub; the other four will fail.
+
+- [ ] **Step 3: Implement `_derive_stopped_naturally` with real tri-state logic.**
+
+  Replace the stub body in `claude_usage/cli/session_summary.py` with the
+  full implementation. Show the complete function:
+
+  ```python
+  def _derive_stopped_naturally(
+      entries: list[dict],
+  ) -> bool | None:
+      """Resolve the tri-state stoppedNaturally field per the spec's table.
+
+      Walks entries once, tracking:
+      - ``has_any_assistant``: True once any assistant entry is seen.
+      - ``last_stop_reason``: Updated on every assistant entry; last wins.
+      - ``prevented_continuation``: True if any stop_hook_summary entry
+        has ``preventedContinuation: true``.
+
+      Resolution table (applied in priority order):
+      - no assistant entries → None (nothing to judge)
+      - last stop_reason absent/empty → None (signal absent)
+      - prevented_continuation is True → False (definitive interrupt)
+      - last stop_reason == "end_turn" → True
+      - last stop_reason in {"max_tokens", "tool_use", "stop_sequence"} → False
+      - any other non-empty stop_reason → None (unknown variant; don't guess)
+
+      Callers emit None as JSON null so consumers can distinguish
+      'unknown' from 'interrupted'.
+
+      Args:
+          entries: Parsed JSONL entries in file order.
+
+      Returns:
+          True for a clean natural end, False for a definitive interrupt
+          signal, or None when the signal is genuinely indeterminate.
+      """
+      has_any_assistant: bool = False
+      last_stop_reason: str | None = None
+      prevented_continuation: bool = False
+
+      for entry in entries:
+          etype = entry.get("type")
+
+          if etype == "assistant":
+              has_any_assistant = True
+              message = entry.get("message") or {}
+              reason = message.get("stop_reason")
+              # Update on every assistant entry — last one wins.
+              last_stop_reason = reason if reason else None
+
+          elif etype == "system":
+              if entry.get("subtype") == "stop_hook_summary":
+                  if entry.get("preventedContinuation") is True:
+                      prevented_continuation = True
+
+      # Resolution table — applied in priority order.
+      if not has_any_assistant:
+          return None
+      if last_stop_reason is None:
+          return None
+      if prevented_continuation:
+          return False
+      if last_stop_reason == "end_turn":
+          return True
+      if last_stop_reason in ("max_tokens", "tool_use", "stop_sequence"):
+          return False
+      # Unknown non-empty stop_reason — don't guess.
+      return None
+  ```
+
+  Wire it into `build_session_summary` by replacing the stub call. The call
+  site is already correct from Task 3.1:
+
+  ```python
+      stopped_naturally = _derive_stopped_naturally(entries)
+  ```
+
+  No change to the call site is needed — only the function body changes.
+
+- [ ] **Step 4: Run → confirm all five tests pass.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestStoppedNaturally -v
+  ```
+
+  Expected: all five tests pass. Then run the full suite:
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement stoppedNaturally tri-state derivation
+
+  Replaces the hardcoded True stub with real logic: walks entries once to
+  track has_any_assistant, last_stop_reason, and prevented_continuation,
+  then resolves per the spec's resolution table. None is emitted for
+  genuinely indeterminate cases so consumers can distinguish unknown from
+  interrupted.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+### Task 3.12: `--max-actions` Cap with Sentinel Truncation
+
+When the action list exceeds `max_actions`, the first `max_actions - 1`
+entries are kept and a sentinel string — `"… (<K> additional actions omitted)"
+where `K` is the count of dropped entries — is appended. Setting
+`max_actions=0` disables the cap entirely.
+
+**Files:**
+- Modify: `tests/test_session_summary.py`
+- Modify: `claude_usage/cli/session_summary.py`
+
+- [ ] **Step 1: Add three tests to a new `TestMaxActionsCap` class.**
+
+  The `over_fifty_actions.jsonl` fixture from Phase 2 contains 55 assistant
+  entries each with a distinct `Edit` target (`src/file_001.py` …
+  `src/file_055.py`), producing 55 non-collapsible action records. These tests
+  use that fixture.
+
+  > **Implementer note:** if the fixture was generated with fewer than 51
+  > distinct-target Bash calls, regenerate it using the Phase 2 script so that
+  > it produces exactly 55 distinct Edit actions (as specified). The fixture
+  > as written in Phase 2 Step 12 meets this requirement.
+
+  ```python
+  class TestMaxActionsCap:
+      """Tests for _apply_max_actions_cap sentinel truncation."""
+
+      def test_actions_truncated_at_default_cap(self) -> None:
+          """Fixture with 55 distinct actions truncates to 50 at default cap.
+
+          The last element must be the sentinel string matching the pattern
+          '… (<K> additional actions omitted)' where K == 55 - 49 == 6.
+          """
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
+          )
+          # Default max_actions == 50.
+          summary = build_session_summary(fixture)
+
+          assert len(summary.actions) == 50
+          assert summary.actions[-1].startswith("… (")
+          assert summary.actions[-1].endswith("additional actions omitted)")
+
+      def test_actions_respects_max_actions_override(self) -> None:
+          """max_actions=5 keeps 4 real actions plus the sentinel."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
+          )
+          summary = build_session_summary(fixture, max_actions=5)
+
+          assert len(summary.actions) == 5
+          assert summary.actions[-1].startswith("… (")
+          assert summary.actions[-1].endswith("additional actions omitted)")
+          # Sentinel must count the correct number of dropped actions.
+          # 55 total, kept 4 = 49 + 1 sentinel → dropped = 55 - 4 = 51.
+          assert "51" in summary.actions[-1]
+
+      def test_actions_cap_zero_disables_truncation(self) -> None:
+          """max_actions=0 disables the cap — all 55 actions are returned."""
+          from pathlib import Path
+
+          from claude_usage.cli.session_summary import build_session_summary
+
+          fixture = Path(
+              "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
+          )
+          summary = build_session_summary(fixture, max_actions=0)
+
+          assert len(summary.actions) == 55
+          # No sentinel — every element is a real action string.
+          assert not any(
+              a.startswith("… (") for a in summary.actions
+          )
+  ```
+
+- [ ] **Step 2: Run → confirm failures.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestMaxActionsCap -v
+  ```
+
+  Expected: `test_actions_truncated_at_default_cap` fails (the stub
+  `_apply_max_actions_cap` from Task 3.1 takes `list[ActionRecord]` and
+  converts to strings, but the current wiring may not correctly count 55
+  actions after the other tasks have replaced stubs with real logic).
+  `test_actions_respects_max_actions_override` and
+  `test_actions_cap_zero_disables_truncation` also fail.
+
+  If all three pass, inspect whether the fixture was properly generated with
+  55 unique-target entries. Run:
+
+  ```bash
+  wc -l tests/fixtures/session_summaries/over_fifty_actions.jsonl
+  ```
+
+  Expected: 56 lines (1 user entry + 55 assistant entries). If fewer, the
+  Phase 2 fixture must be regenerated.
+
+- [ ] **Step 3: Implement `_apply_max_actions_cap` (standalone function) and
+  wire it into `build_session_summary`.**
+
+  The Task 3.1 stub named this function `_apply_max_actions_cap` but had it
+  accept `list[ActionRecord]` and convert to strings internally. Refactor it
+  to accept `list[str]` (already-rendered summaries) so the cap operates on
+  the final string list, not raw records. This separation makes the function
+  independently testable and aligns with the spec's data-flow diagram (step 5
+  renders to strings, step 6 derives fields, step 7 assembles — the cap is
+  applied after rendering).
+
+  Replace the existing `_apply_max_actions_cap` in
+  `claude_usage/cli/session_summary.py` with the following:
+
+  ```python
+  def _apply_max_actions_cap(
+      actions: list[str],
+      max_actions: int,
+  ) -> list[str]:
+      """Apply the --max-actions cap with sentinel truncation.
+
+      When ``max_actions`` is 0, the cap is disabled and the full list is
+      returned. Otherwise, if ``len(actions) > max_actions``, keep the
+      first ``max_actions - 1`` entries and append a sentinel string of
+      the form ``'… (<K> additional actions omitted)'`` where ``K`` is the
+      number of dropped entries.
+
+      Args:
+          actions: Already-rendered past-tense action strings.
+          max_actions: Cap value. 0 means no cap.
+
+      Returns:
+          The (possibly truncated) list of action strings.
+      """
+      if max_actions <= 0:
+          return list(actions)
+      if len(actions) <= max_actions:
+          return list(actions)
+      kept = actions[: max_actions - 1]
+      dropped = len(actions) - (max_actions - 1)
+      sentinel = f"… ({dropped} additional actions omitted)"
+      return [*kept, sentinel]
+  ```
+
+  Update the call site in `build_session_summary` to pass the rendered string
+  list instead of the raw `ActionRecord` list. The assembly snippet in
+  `build_session_summary` becomes:
+
+  ```python
+      project = _derive_project(entries, path)
+      intent = _derive_intent(entries, project)
+      records = _collect_tool_uses(entries)
+      stopped_naturally = _derive_stopped_naturally(entries)
+
+      # Render ActionRecords to strings, then apply the cap.
+      action_strings_full = [r.summary for r in records]
+      action_strings = _apply_max_actions_cap(
+          action_strings_full, max_actions
+      )
+
+      return SessionSummary(
+          project=project,
+          intent=intent,
+          actions=action_strings,
+          stopped_naturally=stopped_naturally,
+      )
+  ```
+
+- [ ] **Step 4: Run → confirm all three tests pass.**
+
+  ```bash
+  uv run pytest tests/test_session_summary.py::TestMaxActionsCap -v
+  ```
+
+  Expected: all three pass. Then run the full suite:
+
+  ```bash
+  uv run pytest tests/test_session_summary.py -x
+  ```
+
+  Expected: all tests pass. The refactor of `_apply_max_actions_cap` to accept
+  `list[str]` does not break any earlier tests because the function was only
+  called from `build_session_summary`.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      add claude_usage/cli/session_summary.py \
+          tests/test_session_summary.py
+  git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
+      commit -m "$(cat <<'EOF'
+  feat(session-summary): implement --max-actions cap with sentinel truncation
+
+  _apply_max_actions_cap now operates on the already-rendered string list.
+  max_actions=0 disables the cap; otherwise the first (N-1) actions are
+  kept and a sentinel counting the dropped remainder is appended.
+
+  part of #19
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  EOF
+  )"
+  ```
+
+---
+
+<!-- PASS-3-END: next pass writes Phase 4 (errors), Phase 5 (output formats), Phase 6 (polish + README + final verify), and the AC coverage matrix -->
