@@ -3551,7 +3551,7 @@ introduces new tool names.
 - Modify: `tests/test_session_summary.py`
 - Modify: `claude_usage/cli/session_summary.py`
 
-- [ ] **Step 1: Add `test_action_classification_unknown_tool_defaults_to_other`.**
+- [x] **Step 1: Add `test_action_classification_unknown_tool_defaults_to_other`.**
 
   ```python
       def test_action_classification_unknown_tool_defaults_to_other(
@@ -3608,7 +3608,7 @@ introduces new tool names.
           )
   ```
 
-- [ ] **Step 2: Run → confirm failure.**
+- [x] **Step 2: Run → confirm failure.**
 
   ```bash
   uv run pytest \
@@ -3620,7 +3620,7 @@ introduces new tool names.
   `"BrandNewTool"` because the temporary `return None` at the end of
   `_classify_tool_use` discards it.
 
-- [ ] **Step 3: Replace the temporary `return None` with the `other` catch-all.**
+- [x] **Step 3: Replace the temporary `return None` with the `other` catch-all.**
 
   In `claude_usage/cli/session_summary.py`, locate the line `return None` at
   the very end of `_classify_tool_use` (the one added as a placeholder in
@@ -3722,7 +3722,7 @@ introduces new tool names.
       )
   ```
 
-- [ ] **Step 4: Run → confirm all tests pass.**
+- [x] **Step 4: Run → confirm all tests pass.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -x
@@ -3731,7 +3731,7 @@ introduces new tool names.
   Expected: all tests pass. The `other` catch-all now handles `"BrandNewTool"`
   and any future unknown tool names.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

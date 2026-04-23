@@ -981,3 +981,54 @@ class TestToolClassification:
         summary = build_session_summary(_parse_fixture(fixture))
         assert len(summary.actions) == 1
         assert summary.actions[0] == "Edited src/result.py"
+
+    def test_action_classification_unknown_tool_defaults_to_other(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """An unrecognised tool name produces an 'other'-type ActionRecord.
+
+        This verifies the forward-compatibility catch-all: any tool that
+        does not match the skip list, edit family, bash family, Agent, or
+        MCP prefix produces:
+        - type == "other"
+        - raw_tool == the original tool name
+        - target == the original tool name
+        - summary == "Used <tool_name> tool"
+        """
+        from claude_usage.cli.session_summary import (
+            ActionRecord,
+            _collect_tool_uses,
+        )
+
+        entry = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "tu-001",
+                    "name": "BrandNewTool",
+                    "input": {"some_param": "some_value"},
+                }],
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            "uuid": "a-001",
+            "timestamp": "2026-04-20T09:00:01.000Z",
+            "sessionId": "sess-unknown",
+        }
+        records = _collect_tool_uses([entry])
+
+        assert len(records) == 1
+        assert records[0] == ActionRecord(
+            type="other",
+            raw_tool="BrandNewTool",
+            target="BrandNewTool",
+            summary="Used BrandNewTool tool",
+        )

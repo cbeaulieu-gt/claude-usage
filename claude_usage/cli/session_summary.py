@@ -277,25 +277,34 @@ def _normalize_mcp_tool_name(raw: str) -> str | None:
 def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
     """Classify a single tool-use content block into an ActionRecord.
 
-    Returns None for tools that should be skipped (info-gathering,
-    skill enablers, ceremony). Returns an ActionRecord for all
-    state-changing tools. Unknown tool names produce an "other"-class
-    record for forward compatibility.
+    Returns None only for tools in SKIPPED_TOOLS (info-gathering,
+    skill enablers, ceremony). Every other tool name produces an
+    ActionRecord — either a typed record for known tools or an
+    ``other``-type record for forward compatibility with unknown tools.
+
+    Classification priority:
+    1. Skip list (SKIPPED_TOOLS) — return None immediately.
+    2. Edit family (_EDIT_TOOLS) — return "edit" ActionRecord.
+    3. Bash/PowerShell family (_BASH_TOOLS) — return "bash" ActionRecord.
+    4. Agent dispatch — return "agent_dispatch" ActionRecord.
+    5. MCP tools (mcp__* prefix) — normalise name; return "mcp" on success,
+       "other" on malformed name.
+    6. Catch-all — return "other" ActionRecord for forward compatibility.
 
     Args:
         tool_use: A content block dict with ``type == "tool_use"``.
 
     Returns:
-        An ActionRecord, or None if this tool use should be skipped.
+        An ActionRecord, or None if this tool use is in the skip list.
     """
     name: str = tool_use.get("name", "")
     inp: dict = tool_use.get("input", {})
 
-    # Skip list — info-gathering and ceremony.
+    # 1. Skip list — info-gathering and ceremony.
     if name in SKIPPED_TOOLS:
         return None
 
-    # Edit family.
+    # 2. Edit family.
     if name in _EDIT_TOOLS:
         target = inp.get("file_path", "")
         return ActionRecord(
@@ -305,7 +314,7 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
             summary=f"Edited {target}",
         )
 
-    # Bash / PowerShell.
+    # 3. Bash / PowerShell.
     if name in _BASH_TOOLS:
         raw_command: str = inp.get("command", "")
         collapsed_command = " ".join(raw_command.split())
@@ -320,7 +329,7 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
             summary=f"Ran `{rendered}`",
         )
 
-    # Agent dispatch.
+    # 4. Agent dispatch.
     if name == "Agent":
         subagent_type: str = inp.get("subagent_type", "unknown")
         return ActionRecord(
@@ -330,7 +339,7 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
             summary=f"Dispatched {subagent_type} sub-agent",
         )
 
-    # MCP tools — both plugin-scoped and direct forms.
+    # 5. MCP tools — both plugin-scoped and direct forms.
     if name.startswith("mcp__"):
         normalised = _normalize_mcp_tool_name(name)
         if normalised is not None:
@@ -349,8 +358,13 @@ def _classify_tool_use(tool_use: dict) -> ActionRecord | None:
             summary=f"Used {name} tool",
         )
 
-    # "other" default — implemented in Task 3.9.
-    return None   # temporary; replaced in Task 3.9
+    # 6. Catch-all — default-include unknown tools for forward compatibility.
+    return ActionRecord(
+        type="other",
+        raw_tool=name,
+        target=name,
+        summary=f"Used {name} tool",
+    )
 
 
 def _collapse_consecutive(
