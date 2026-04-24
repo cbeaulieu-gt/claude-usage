@@ -5497,7 +5497,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Read the current README and identify the Usage section.**
+- [x] **Step 1: Read the current README and identify the Usage section.**
 
   The current README (as of plan authoring) has a `## Usage` section showing
   `python -m claude_usage` invocations with bare flags. After the Phase 1
@@ -5603,7 +5603,7 @@ where `K` is the count of dropped entries — is appended. Setting
   (no subcommand) must be updated to use `claude-usage dashboard [flags]`.
   ````
 
-- [ ] **Step 2: Version bump in `pyproject.toml`.**
+- [x] **Step 2: Version bump in `pyproject.toml`.**
 
   The project currently has `version = "0.1.0"`. The subparser refactor and
   new subcommand constitute a minor-version change (new public interface,
@@ -5613,7 +5613,7 @@ where `K` is the count of dropped entries — is appended. Setting
   version = "0.2.0"
   ```
 
-- [ ] **Step 3: Commit.**
+- [x] **Step 3: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
