@@ -4379,7 +4379,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
   Add to `tests/test_session_summary.py` (inside `class TestErrorPaths` or at
   module level — implementer chooses; be consistent):
@@ -4425,7 +4425,7 @@ where `K` is the count of dropped entries — is appended. Setting
           )
   ```
 
-- [ ] **Step 2: Run → confirm it fails.**
+- [x] **Step 2: Run → confirm it fails.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestErrorPaths::test_missing_file_exits_1 -v
@@ -4434,7 +4434,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected failure reason: `session-summary` subcommand does not exist yet, or
   `run()` raises `NotImplementedError`. Either way the exit code is not 1.
 
-- [ ] **Step 3: Implement `read_transcript` + partial `run`.**
+- [x] **Step 3: Implement `read_transcript` + partial `run`.**
 
   In `claude_usage/cli/session_summary.py`, add the following helper and wire it
   into a partial `run`. The function returns a tuple so Task 4.3 can extend it
@@ -4544,7 +4544,7 @@ where `K` is the count of dropped entries — is appended. Setting
   ss_parser.set_defaults(func=ss_mod.run)
   ```
 
-- [ ] **Step 4: Run → confirm the test passes.**
+- [x] **Step 4: Run → confirm the test passes.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestErrorPaths::test_missing_file_exits_1 -v
@@ -4553,7 +4553,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: PASSED. The `OSError` from opening a nonexistent path propagates
   up through `read_transcript`, is caught, and the function returns exit code 1.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -4584,7 +4584,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   The three sub-cases each require a fixture file. Add fixture creation inline
   in the tests using `tmp_path` so no checked-in fixture is required (the
@@ -4654,7 +4654,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert "contains no user turns" in result.stderr
   ```
 
-- [ ] **Step 2: Run → confirm all three fail.**
+- [x] **Step 2: Run → confirm all three fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestExitNoUserTurns -v
@@ -4664,7 +4664,7 @@ where `K` is the count of dropped entries — is appended. Setting
   traceback, which produces a non-zero exit code (likely 1 from the exception),
   not exit code 2.
 
-- [ ] **Step 3: Add the exit-2 branch to `run`.**
+- [x] **Step 3: Add the exit-2 branch to `run`.**
 
   Replace the `NotImplementedError` sentinel in `run` with the exit-2 check,
   leaving a new sentinel for the remaining path:
@@ -4695,7 +4695,7 @@ where `K` is the count of dropped entries — is appended. Setting
   exits 2. The system-entries-only fixture also has no `userType == "external"`
   entries → same path.
 
-- [ ] **Step 4: Run → confirm all three pass; re-run Task 4.1 test to confirm
+- [x] **Step 4: Run → confirm all three pass; re-run Task 4.1 test to confirm
   no regression.**
 
   ```bash
@@ -4705,7 +4705,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all four tests PASSED.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -4737,7 +4737,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
   ```python
   class TestExitNotJsonl:
@@ -4788,7 +4788,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert result.returncode == 2
   ```
 
-- [ ] **Step 2: Run → confirm both tests fail.**
+- [x] **Step 2: Run → confirm both tests fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestExitNotJsonl -v
@@ -4798,7 +4798,7 @@ where `K` is the count of dropped entries — is appended. Setting
   `NotImplementedError` (not code 3); `test_empty_is_not_exit_3` may already
   pass (exit 2 is wired), but confirm.
 
-- [ ] **Step 3: Add the exit-3 branch to `run`.**
+- [x] **Step 3: Add the exit-3 branch to `run`.**
 
   The `read_transcript` signature already returns `non_blank_lines`. Insert the
   exit-3 check between the IO catch and the exit-2 check. The critical ordering
@@ -4855,7 +4855,7 @@ where `K` is the count of dropped entries — is appended. Setting
   This matches the spec's explicit amendment: "Zero-byte and whitespace-only
   files fall under exit 2, not exit 3."
 
-- [ ] **Step 4: Run → both new tests pass; re-run full test class suite.**
+- [x] **Step 4: Run → both new tests pass; re-run full test class suite.**
 
   ```bash
   uv run pytest \
@@ -4868,7 +4868,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: all six tests PASSED. Specifically confirm `test_empty_is_not_exit_3`
   exits 2 and `test_zero_byte_file_exits_2` still exits 2.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -4900,7 +4900,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   ```python
   class TestStdoutStderrDiscipline:
@@ -4962,7 +4962,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert not result.stdout.endswith("\n\n")
   ```
 
-- [ ] **Step 2: Run → confirm both tests fail.**
+- [x] **Step 2: Run → confirm both tests fail.**
 
   ```bash
   uv run pytest \
@@ -4972,7 +4972,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: `test_stdout_on_success_is_pure_json` fails because the success
   path still hits `NotImplementedError`.
 
-- [ ] **Step 3: Wire the success path and implement `render_json` minimally.**
+- [x] **Step 3: Wire the success path and implement `render_json` minimally.**
 
   First, implement `render_json` and its private helper. The helper produces an
   explicitly ordered dict so key order in the JSON output is deterministic
@@ -5122,7 +5122,7 @@ where `K` is the count of dropped entries — is appended. Setting
       return EXIT_OK
   ```
 
-- [ ] **Step 4: Run → both new tests pass; run the full test file.**
+- [x] **Step 4: Run → both new tests pass; run the full test file.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -v
@@ -5131,7 +5131,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: all tests pass, including all prior error-path tests and the two
   new discipline tests.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -5167,7 +5167,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the tests.**
+- [x] **Step 1: Write the tests.**
 
   ```python
   class TestRenderJson:
@@ -5231,7 +5231,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert not output.endswith("\n")
   ```
 
-- [ ] **Step 2: Run → confirm results.**
+- [x] **Step 2: Run → confirm results.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestRenderJson -v
@@ -5241,7 +5241,7 @@ where `K` is the count of dropped entries — is appended. Setting
   If all pass, the tests still serve their purpose: they lock down the
   invariants so a future refactor cannot break them silently.
 
-- [ ] **Step 3: Formalize `render_json` and `_summary_to_dict`.**
+- [x] **Step 3: Formalize `render_json` and `_summary_to_dict`.**
 
   The implementations written in Task 4.4 are already correct. Confirm the
   functions have full Google-style docstrings (added in Task 4.4). If any
@@ -5297,7 +5297,7 @@ where `K` is the count of dropped entries — is appended. Setting
       )
   ```
 
-- [ ] **Step 4: Run → all `TestRenderJson` tests pass; run full suite.**
+- [x] **Step 4: Run → all `TestRenderJson` tests pass; run full suite.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -v
@@ -5305,7 +5305,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
@@ -5337,7 +5337,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   ```python
   class TestRenderText:
@@ -5391,7 +5391,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert "  - " not in output
   ```
 
-- [ ] **Step 2: Run → confirm all five tests fail.**
+- [x] **Step 2: Run → confirm all five tests fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestRenderText -v
@@ -5399,7 +5399,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all fail with `NotImplementedError` from the Task 4.4 stub.
 
-- [ ] **Step 3: Implement `render_text` and `_tri_state_to_word`.**
+- [x] **Step 3: Implement `render_text` and `_tri_state_to_word`.**
 
   ```python
   def _tri_state_to_word(value: bool | None) -> str:
@@ -5455,7 +5455,7 @@ where `K` is the count of dropped entries — is appended. Setting
       return "\n".join(lines)
   ```
 
-- [ ] **Step 4: Run → all five tests pass; run full suite.**
+- [x] **Step 4: Run → all five tests pass; run full suite.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -v
@@ -5463,7 +5463,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \

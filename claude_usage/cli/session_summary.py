@@ -14,7 +14,9 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -518,6 +520,47 @@ def _apply_max_actions_cap(
     return [*kept, sentinel]
 
 
+def read_transcript(
+    path: Path,
+) -> tuple[list[dict], int]:
+    """Read and parse a JSONL transcript file.
+
+    Opens *path*, iterates its lines, skips blanks, silently skips
+    individual lines that fail ``json.loads``, and returns the
+    successfully parsed entries together with the total non-blank
+    line count.
+
+    The non-blank count is used by ``run`` to distinguish an
+    empty/whitespace-only file (exit 2) from a file that has content
+    but none of it parses (exit 3).
+
+    Args:
+        path: Absolute or relative path to the JSONL transcript file.
+
+    Returns:
+        A 2-tuple ``(entries, non_blank_lines)`` where *entries* is
+        the list of successfully parsed dicts and *non_blank_lines*
+        is the count of non-empty, non-whitespace lines seen.
+
+    Raises:
+        OSError: Any subclass raised by ``open()`` or line iteration
+            (``FileNotFoundError``, ``PermissionError``, etc.).
+    """
+    entries: list[dict] = []
+    non_blank_lines = 0
+    with path.open(encoding="utf-8") as fh:
+        for raw in fh:
+            stripped = raw.strip()
+            if not stripped:
+                continue
+            non_blank_lines += 1
+            try:
+                entries.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                pass  # tolerate individual-line failures
+    return entries, non_blank_lines
+
+
 def build_session_summary(
     entries: list[dict],
     *,
@@ -560,47 +603,103 @@ def build_session_summary(
     )
 
 
+def _summary_to_dict(summary: SessionSummary) -> dict:
+    """Convert a SessionSummary to an ordered dict matching the JSON contract.
+
+    Key order matches the spec: project → intent → actions →
+    stoppedNaturally.  Python 3.7+ preserves dict insertion order,
+    making ``json.dumps`` output deterministic across runs.
+
+    Args:
+        summary: The session summary dataclass instance to convert.
+
+    Returns:
+        An ordered dict with camelCase keys ready for ``json.dumps``.
+        Keys: ``project``, ``intent``, ``actions``,
+        ``stoppedNaturally``.
+    """
+    return {
+        "project": summary.project,
+        "intent": summary.intent,
+        "actions": summary.actions,
+        "stoppedNaturally": summary.stopped_naturally,
+    }
+
+
 def render_json(summary: SessionSummary) -> str:
     """Render a SessionSummary as a pretty-printed JSON string.
 
-    Key order matches the output contract: project, intent, actions,
-    stoppedNaturally. Uses json.dumps with indent=2 and ensure_ascii=False.
+    Produces the exact wire format consumed by the ``/whats-next``
+    skill.  Uses ``indent=2`` and ``ensure_ascii=False`` per spec.
+    Key order is deterministic: project, intent, actions,
+    stoppedNaturally.
+
+    Does **not** append a trailing newline — the caller (``run``)
+    adds exactly one before printing to stdout, ensuring the
+    stdout/stderr discipline invariant.
 
     Args:
-        summary: The session summary to serialise.
+        summary: The session summary dataclass instance.
 
     Returns:
-        A JSON string ending with a trailing newline.
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
+        A JSON string without a trailing newline.
     """
-    raise NotImplementedError("render_json — implemented in Phase 3")
+    return json.dumps(
+        _summary_to_dict(summary), indent=2, ensure_ascii=False
+    )
+
+
+def _tri_state_to_word(value: bool | None) -> str:
+    """Convert a tri-state boolean to a display word.
+
+    Args:
+        value: ``True``, ``False``, or ``None``.
+
+    Returns:
+        ``"yes"`` for ``True``, ``"no"`` for ``False``,
+        ``"unknown"`` for ``None``.
+    """
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return "unknown"
 
 
 def render_text(summary: SessionSummary) -> str:
     """Render a SessionSummary as a human-readable debug string.
 
-    Output format::
+    Intended for ``--format text`` — not consumed by ``/whats-next``.
+    Useful for manual inspection and debugging.
 
-        Project: <project>
-        Intent: <intent>
-        Stopped naturally: yes | no | unknown
+    Output template::
+
+        Project: {project}
+        Intent: {intent}
+        Stopped naturally: {yes|no|unknown}
 
         Actions:
-          - <action 1>
-          - <action 2>
+          - {action 1}
+          - {action 2}
+          ...
 
     Args:
-        summary: The session summary to render.
+        summary: The session summary dataclass instance.
 
     Returns:
-        A multi-line string suitable for writing to stdout.
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
+        Multi-line string.  Does not end with a trailing newline —
+        the caller (``run``) adds exactly one.
     """
-    raise NotImplementedError("render_text — implemented in Phase 3")
+    lines = [
+        f"Project: {summary.project}",
+        f"Intent: {summary.intent}",
+        f"Stopped naturally: {_tri_state_to_word(summary.stopped_naturally)}",
+        "",
+        "Actions:",
+    ]
+    for action in summary.actions:
+        lines.append(f"  - {action}")
+    return "\n".join(lines)
 
 
 def build_parser(
@@ -640,19 +739,83 @@ def build_parser(
 
 
 def run(args: argparse.Namespace) -> int:
-    """Execute the session-summary subcommand.
+    """Entry point for the session-summary subcommand.
+
+    Dispatches ``--path`` through the full parse → summarise → render
+    pipeline, printing JSON (or text) to stdout on success and a
+    single diagnostic line to stderr on failure.
 
     Args:
-        args: Parsed argument namespace from the session-summary subparser.
+        args: Parsed CLI namespace.  Expected attributes:
+            ``args.path`` (str), ``args.output_format`` (str),
+            ``args.max_actions`` (int).
 
     Returns:
-        Integer exit code (EXIT_OK, EXIT_IO_FAILURE, EXIT_NO_USER_TURNS,
-        or EXIT_NOT_JSONL).
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
+        Integer exit code (one of ``EXIT_OK``, ``EXIT_IO_FAILURE``,
+        ``EXIT_NO_USER_TURNS``, ``EXIT_NOT_JSONL``).
     """
-    raise NotImplementedError(
-        "session-summary is not yet implemented. "
-        "Full implementation arrives in Phase 3."
+    path = Path(args.path)
+
+    # ── Phase 4.1: IO failure ────────────────────────────────────────
+    try:
+        entries, non_blank_lines = read_transcript(path)
+    except OSError as exc:
+        print(
+            f"session-summary: cannot read transcript at '{path}': "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_IO_FAILURE
+
+    # ── Phase 4.3: not JSONL ─────────────────────────────────────────
+    # Condition: file had parseable-attempt content (non_blank_lines > 0)
+    # but zero entries survived json.loads.
+    # NOTE: non_blank_lines == 0 means empty/whitespace-only → fall
+    # through to the no-user-turns check (exit 2), not here.
+    if not entries and non_blank_lines > 0:
+        print(
+            f"session-summary: transcript '{path}' is not valid JSONL",
+            file=sys.stderr,
+        )
+        return EXIT_NOT_JSONL
+
+    # ── Phase 4.2: no user turns ─────────────────────────────────────
+    has_user_turns = any(
+        entry.get("type") == "user"
+        and entry.get("userType") == "external"
+        for entry in entries
     )
+    if not has_user_turns:
+        print(
+            f"session-summary: transcript '{path}' contains no user turns",
+            file=sys.stderr,
+        )
+        return EXIT_NO_USER_TURNS
+
+    # ── Success path (exit 0) ────────────────────────────────────────
+    # Non-fatal warning: malformed lines were skipped.
+    skipped = non_blank_lines - len(entries)
+    if skipped > 0:
+        print(
+            f"session-summary: skipped {skipped} malformed line(s)"
+            f" in '{path}'",
+            file=sys.stderr,
+        )
+
+    # run() is the single I/O site. Pass already-parsed entries so
+    # build_session_summary performs no file I/O.
+    slug = path.parent.name if path.parent.name else None
+    summary = build_session_summary(
+        entries,
+        project_slug_fallback=slug,
+        max_actions=args.max_actions,
+    )
+
+    if args.output_format == "json":
+        output = render_json(summary)
+    else:
+        output = render_text(summary)
+
+    # Exactly one trailing newline — the JSON/text contract.
+    print(output, flush=True)
+    return EXIT_OK

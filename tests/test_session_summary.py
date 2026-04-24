@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 import json as _json
+import subprocess
+import sys
 from pathlib import Path as _Path
 
 import pytest
@@ -15,6 +17,8 @@ from claude_usage.cli.session_summary import (
     EXIT_OK,
     ActionRecord,
     SessionSummary,
+    render_json,
+    render_text,
 )
 
 
@@ -1255,3 +1259,317 @@ class TestMaxActionsCap:
         assert not any(
             a.startswith("… (") for a in summary.actions
         )
+
+
+class TestExitNoUserTurns:
+    """Exit 2 when readable transcript has no external user turns."""
+
+    def test_empty_session_exits_2(self) -> None:
+        """Agent-setting / system-only transcript → exit 2."""
+        fixture = (
+            _Path("tests/fixtures/session_summaries")
+            / "empty_no_user_turns.jsonl"
+        )
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(fixture),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "contains no user turns" in result.stderr
+
+    def test_zero_byte_file_exits_2(self, tmp_path: pytest.TempPathFactory) -> None:
+        """Zero-byte file → exit 2 (not exit 3)."""
+        zero_byte = tmp_path / "zero_byte.jsonl"
+        zero_byte.write_text("")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(zero_byte),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "contains no user turns" in result.stderr
+
+    def test_whitespace_only_file_exits_2(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """File with only blank lines → exit 2 (not exit 3)."""
+        ws_only = tmp_path / "whitespace_only.jsonl"
+        ws_only.write_text("\n   \n\t\n")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(ws_only),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "contains no user turns" in result.stderr
+
+
+class TestExitNotJsonl:
+    """Exit 3 when the file has content but none parses as JSONL."""
+
+    def test_malformed_file_exits_3(self, tmp_path: pytest.fixture) -> None:
+        """File with non-blank, non-JSON lines → exit 3.
+
+        This is distinct from exit 2: bytes are present, attempted,
+        and rejected — not an empty/whitespace file.
+        """
+        malformed = tmp_path / "all_malformed.jsonl"
+        malformed.write_text(
+            "this is not json\n"
+            "{also not json\n"
+            "definitely: not: json: either\n"
+        )
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(malformed),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3
+        assert result.stdout == ""
+        assert "is not valid JSONL" in result.stderr
+
+    def test_empty_is_not_exit_3(self, tmp_path: pytest.fixture) -> None:
+        """Zero-byte file must exit 2, not 3 — spec requirement.
+
+        Exit 3 requires at least one non-blank line that was attempted.
+        """
+        empty = tmp_path / "empty.jsonl"
+        empty.write_text("")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(empty),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        # Must be 2, not 3.
+        assert result.returncode == 2
+
+
+class TestErrorPaths:
+    """Tests for non-zero exit codes and stdout/stderr discipline."""
+
+    def test_missing_file_exits_1(self, tmp_path) -> None:
+        """Exit 1 when --path points to a non-existent file.
+
+        Asserts:
+          - Exit code is EXIT_IO_FAILURE (1).
+          - stdout is empty (no partial output).
+          - stderr contains the expected message fragments.
+        """
+        nonexistent = tmp_path / "nonexistent.jsonl"
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(nonexistent),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert "cannot read transcript at" in result.stderr
+        assert str(nonexistent) in result.stderr
+        # stderr should name one of the OSError subclass names
+        assert any(
+            name in result.stderr
+            for name in (
+                "FileNotFoundError",
+                "OSError",
+                "No such file or directory",
+            )
+        )
+
+
+class TestStdoutStderrDiscipline:
+    """stdout/stderr contract: errors → stderr only; success → stdout only."""
+
+    def test_stdout_on_error_is_empty(self, tmp_path: pytest.fixture) -> None:
+        """Any error path must emit nothing to stdout.
+
+        Uses the missing-file path (exit 1) as a representative error.
+        Asserts stdout is completely empty and stderr is exactly one line.
+        """
+        nonexistent = tmp_path / "missing.jsonl"
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(nonexistent),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.stdout == ""
+        # stderr must be exactly one non-empty line
+        stderr_lines = [
+            ln for ln in result.stderr.splitlines() if ln.strip()
+        ]
+        assert len(stderr_lines) == 1
+
+    def test_stdout_on_success_is_pure_json(self) -> None:
+        """Success path stdout is a parseable JSON document, nothing else.
+
+        Asserts:
+          - ``json.loads(stdout)`` succeeds without error.
+          - stdout has exactly one trailing newline (no header text,
+            no progress banners, no leading whitespace).
+          - All four contract keys are present.
+        """
+        fixture = (
+            _Path("tests/fixtures/session_summaries") / "happy_path.jsonl"
+        )
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(fixture),
+                "--format", "json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        # Must parse cleanly — no leading/trailing non-JSON text
+        parsed = _json.loads(result.stdout)
+        assert set(parsed.keys()) >= {
+            "project", "intent", "actions", "stoppedNaturally"
+        }
+        # Exactly one trailing newline — the JSON document ends cleanly
+        assert result.stdout.endswith("\n")
+        assert not result.stdout.endswith("\n\n")
+
+
+class TestRenderJson:
+    """Unit tests for render_json() and _summary_to_dict()."""
+
+    def _make_summary(
+        self,
+        stopped_naturally: bool | None = True,
+    ) -> SessionSummary:
+        """Factory for a minimal SessionSummary for render tests."""
+        return SessionSummary(
+            project="my-project",
+            intent="Test the renderer",
+            actions=["Edited foo.py", "Ran pytest"],
+            stopped_naturally=stopped_naturally,
+        )
+
+    def test_render_json_key_order_and_camelcase(self) -> None:
+        """Keys appear in contract order: project, intent, actions,
+        stoppedNaturally; camelCase is used for stoppedNaturally."""
+        summary = self._make_summary(stopped_naturally=True)
+        output = render_json(summary)
+        parsed = _json.loads(output)
+        keys = list(parsed.keys())
+        assert keys == ["project", "intent", "actions", "stoppedNaturally"]
+
+    def test_render_json_indented_two_spaces(self) -> None:
+        """Output uses indent=2 (spec: pretty-printed)."""
+        summary = self._make_summary()
+        output = render_json(summary)
+        # A two-space-indented JSON will have lines like '  "project"'
+        assert '  "project"' in output
+
+    def test_render_json_no_trailing_whitespace_per_line(self) -> None:
+        """No line ends with trailing whitespace."""
+        summary = self._make_summary()
+        output = render_json(summary)
+        for line in output.splitlines():
+            assert line == line.rstrip(), (
+                f"Trailing whitespace on line: {line!r}"
+            )
+
+    def test_render_json_handles_tri_state_true(self) -> None:
+        """stopped_naturally=True → JSON literal ``true``."""
+        output = render_json(self._make_summary(stopped_naturally=True))
+        assert '"stoppedNaturally": true' in output
+
+    def test_render_json_handles_tri_state_false(self) -> None:
+        """stopped_naturally=False → JSON literal ``false``."""
+        output = render_json(self._make_summary(stopped_naturally=False))
+        assert '"stoppedNaturally": false' in output
+
+    def test_render_json_handles_tri_state_none(self) -> None:
+        """stopped_naturally=None → JSON literal ``null``."""
+        output = render_json(self._make_summary(stopped_naturally=None))
+        assert '"stoppedNaturally": null' in output
+
+    def test_render_json_does_not_add_trailing_newline(self) -> None:
+        """render_json returns the bare document; run() adds the newline."""
+        output = render_json(self._make_summary())
+        assert not output.endswith("\n")
+
+
+class TestRenderText:
+    """Unit tests for render_text() human-readable debug view."""
+
+    def _make_summary(
+        self,
+        stopped_naturally: bool | None = True,
+        actions: list[str] | None = None,
+    ) -> SessionSummary:
+        """Factory for SessionSummary instances used in render_text tests."""
+        return SessionSummary(
+            project="my-project",
+            intent="Build something useful",
+            actions=actions if actions is not None
+                else ["Edited foo.py", "Ran pytest"],
+            stopped_naturally=stopped_naturally,
+        )
+
+    def test_render_text_happy_path(self) -> None:
+        """Full debug-view string matches expected template."""
+        summary = self._make_summary(stopped_naturally=True)
+        output = render_text(summary)
+        assert "Project: my-project" in output
+        assert "Intent: Build something useful" in output
+        assert "Stopped naturally: yes" in output
+        assert "Actions:" in output
+        assert "  - Edited foo.py" in output
+        assert "  - Ran pytest" in output
+
+    def test_render_text_stopped_naturally_true(self) -> None:
+        """True → 'yes'."""
+        output = render_text(self._make_summary(stopped_naturally=True))
+        assert "Stopped naturally: yes" in output
+
+    def test_render_text_stopped_naturally_false(self) -> None:
+        """False → 'no'."""
+        output = render_text(self._make_summary(stopped_naturally=False))
+        assert "Stopped naturally: no" in output
+
+    def test_render_text_stopped_naturally_none(self) -> None:
+        """None → 'unknown'."""
+        output = render_text(self._make_summary(stopped_naturally=None))
+        assert "Stopped naturally: unknown" in output
+
+    def test_render_text_empty_actions(self) -> None:
+        """Empty actions list → 'Actions:' section present, no bullets."""
+        summary = self._make_summary(actions=[])
+        output = render_text(summary)
+        assert "Actions:" in output
+        assert "  - " not in output
