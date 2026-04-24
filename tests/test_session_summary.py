@@ -17,6 +17,7 @@ from claude_usage.cli.session_summary import (
     EXIT_OK,
     ActionRecord,
     SessionSummary,
+    render_json,
 )
 
 
@@ -1459,3 +1460,64 @@ class TestStdoutStderrDiscipline:
         # Exactly one trailing newline — the JSON document ends cleanly
         assert result.stdout.endswith("\n")
         assert not result.stdout.endswith("\n\n")
+
+
+class TestRenderJson:
+    """Unit tests for render_json() and _summary_to_dict()."""
+
+    def _make_summary(
+        self,
+        stopped_naturally: bool | None = True,
+    ) -> SessionSummary:
+        """Factory for a minimal SessionSummary for render tests."""
+        return SessionSummary(
+            project="my-project",
+            intent="Test the renderer",
+            actions=["Edited foo.py", "Ran pytest"],
+            stopped_naturally=stopped_naturally,
+        )
+
+    def test_render_json_key_order_and_camelcase(self) -> None:
+        """Keys appear in contract order: project, intent, actions,
+        stoppedNaturally; camelCase is used for stoppedNaturally."""
+        summary = self._make_summary(stopped_naturally=True)
+        output = render_json(summary)
+        parsed = _json.loads(output)
+        keys = list(parsed.keys())
+        assert keys == ["project", "intent", "actions", "stoppedNaturally"]
+
+    def test_render_json_indented_two_spaces(self) -> None:
+        """Output uses indent=2 (spec: pretty-printed)."""
+        summary = self._make_summary()
+        output = render_json(summary)
+        # A two-space-indented JSON will have lines like '  "project"'
+        assert '  "project"' in output
+
+    def test_render_json_no_trailing_whitespace_per_line(self) -> None:
+        """No line ends with trailing whitespace."""
+        summary = self._make_summary()
+        output = render_json(summary)
+        for line in output.splitlines():
+            assert line == line.rstrip(), (
+                f"Trailing whitespace on line: {line!r}"
+            )
+
+    def test_render_json_handles_tri_state_true(self) -> None:
+        """stopped_naturally=True → JSON literal ``true``."""
+        output = render_json(self._make_summary(stopped_naturally=True))
+        assert '"stoppedNaturally": true' in output
+
+    def test_render_json_handles_tri_state_false(self) -> None:
+        """stopped_naturally=False → JSON literal ``false``."""
+        output = render_json(self._make_summary(stopped_naturally=False))
+        assert '"stoppedNaturally": false' in output
+
+    def test_render_json_handles_tri_state_none(self) -> None:
+        """stopped_naturally=None → JSON literal ``null``."""
+        output = render_json(self._make_summary(stopped_naturally=None))
+        assert '"stoppedNaturally": null' in output
+
+    def test_render_json_does_not_add_trailing_newline(self) -> None:
+        """render_json returns the bare document; run() adds the newline."""
+        output = render_json(self._make_summary())
+        assert not output.endswith("\n")

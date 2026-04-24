@@ -607,14 +607,16 @@ def _summary_to_dict(summary: SessionSummary) -> dict:
     """Convert a SessionSummary to an ordered dict matching the JSON contract.
 
     Key order matches the spec: project → intent → actions →
-    stoppedNaturally.  Python 3.7+ preserves insertion order, so
-    ``json.dumps`` will emit keys in this sequence.
+    stoppedNaturally.  Python 3.7+ preserves dict insertion order,
+    making ``json.dumps`` output deterministic across runs.
 
     Args:
-        summary: The session summary to convert.
+        summary: The session summary dataclass instance to convert.
 
     Returns:
         An ordered dict with camelCase keys ready for ``json.dumps``.
+        Keys: ``project``, ``intent``, ``actions``,
+        ``stoppedNaturally``.
     """
     return {
         "project": summary.project,
@@ -627,16 +629,20 @@ def _summary_to_dict(summary: SessionSummary) -> dict:
 def render_json(summary: SessionSummary) -> str:
     """Render a SessionSummary as a pretty-printed JSON string.
 
-    Uses ``indent=2`` and ``ensure_ascii=False`` per the output
-    contract. Key order is deterministic: project, intent, actions,
+    Produces the exact wire format consumed by the ``/whats-next``
+    skill.  Uses ``indent=2`` and ``ensure_ascii=False`` per spec.
+    Key order is deterministic: project, intent, actions,
     stoppedNaturally.
+
+    Does **not** append a trailing newline — the caller (``run``)
+    adds exactly one before printing to stdout, ensuring the
+    stdout/stderr discipline invariant.
 
     Args:
         summary: The session summary dataclass instance.
 
     Returns:
-        A JSON string, not terminated with a newline (the caller
-        adds exactly one trailing newline before printing to stdout).
+        A JSON string without a trailing newline.
     """
     return json.dumps(
         _summary_to_dict(summary), indent=2, ensure_ascii=False

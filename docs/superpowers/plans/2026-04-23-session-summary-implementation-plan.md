@@ -5167,7 +5167,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the tests.**
+- [x] **Step 1: Write the tests.**
 
   ```python
   class TestRenderJson:
@@ -5231,7 +5231,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert not output.endswith("\n")
   ```
 
-- [ ] **Step 2: Run → confirm results.**
+- [x] **Step 2: Run → confirm results.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestRenderJson -v
@@ -5241,7 +5241,7 @@ where `K` is the count of dropped entries — is appended. Setting
   If all pass, the tests still serve their purpose: they lock down the
   invariants so a future refactor cannot break them silently.
 
-- [ ] **Step 3: Formalize `render_json` and `_summary_to_dict`.**
+- [x] **Step 3: Formalize `render_json` and `_summary_to_dict`.**
 
   The implementations written in Task 4.4 are already correct. Confirm the
   functions have full Google-style docstrings (added in Task 4.4). If any
@@ -5297,7 +5297,7 @@ where `K` is the count of dropped entries — is appended. Setting
       )
   ```
 
-- [ ] **Step 4: Run → all `TestRenderJson` tests pass; run full suite.**
+- [x] **Step 4: Run → all `TestRenderJson` tests pass; run full suite.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -v
@@ -5305,7 +5305,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
