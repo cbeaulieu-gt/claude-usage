@@ -5642,7 +5642,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Run the full test suite.**
+- [x] **Step 1: Run the full test suite.**
 
   ```bash
   uv run pytest -v
@@ -5656,7 +5656,7 @@ where `K` is the count of dropped entries — is appended. Setting
   the fix touches implementation files, commit with:
   `fix(session-summary): <description> (part of #19)`.
 
-- [ ] **Step 2: Lint check.**
+- [x] **Step 2: Lint check.**
 
   ```bash
   uv run ruff check .
@@ -5676,7 +5676,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
   ```
 
-- [ ] **Step 3: Format check.**
+- [x] **Step 3: Format check.**
 
   ```bash
   uv run ruff format --check .
@@ -5696,7 +5696,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
   ```
 
-- [ ] **Step 4: Manual CLI sanity check.**
+- [x] **Step 4: Manual CLI sanity check.**
 
   Run each of the following and confirm the described output:
 
@@ -5727,7 +5727,7 @@ where `K` is the count of dropped entries — is appended. Setting
   # "cannot read transcript at '/tmp/nonexistent.jsonl'". Exit 1.
   ```
 
-- [ ] **Step 5: No-op commit gate.**
+- [x] **Step 5: No-op commit gate.**
 
   If Steps 1–3 required no fixes, no commit is needed. If fixes were made,
   they are already committed per Steps 2–3 above. Either way, run a final
