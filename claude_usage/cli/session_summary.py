@@ -649,19 +649,57 @@ def render_json(summary: SessionSummary) -> str:
     )
 
 
+def _tri_state_to_word(value: bool | None) -> str:
+    """Convert a tri-state boolean to a display word.
+
+    Args:
+        value: ``True``, ``False``, or ``None``.
+
+    Returns:
+        ``"yes"`` for ``True``, ``"no"`` for ``False``,
+        ``"unknown"`` for ``None``.
+    """
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return "unknown"
+
+
 def render_text(summary: SessionSummary) -> str:
     """Render a SessionSummary as a human-readable debug string.
+
+    Intended for ``--format text`` — not consumed by ``/whats-next``.
+    Useful for manual inspection and debugging.
+
+    Output template::
+
+        Project: {project}
+        Intent: {intent}
+        Stopped naturally: {yes|no|unknown}
+
+        Actions:
+          - {action 1}
+          - {action 2}
+          ...
 
     Args:
         summary: The session summary dataclass instance.
 
     Returns:
-        Multi-line human-readable string.
-
-    Raises:
-        NotImplementedError: Until Task 5.2 is implemented.
+        Multi-line string.  Does not end with a trailing newline —
+        the caller (``run``) adds exactly one.
     """
-    raise NotImplementedError("implemented in Task 5.2")
+    lines = [
+        f"Project: {summary.project}",
+        f"Intent: {summary.intent}",
+        f"Stopped naturally: {_tri_state_to_word(summary.stopped_naturally)}",
+        "",
+        "Actions:",
+    ]
+    for action in summary.actions:
+        lines.append(f"  - {action}")
+    return "\n".join(lines)
 
 
 def build_parser(

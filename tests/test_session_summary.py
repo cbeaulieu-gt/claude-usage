@@ -18,6 +18,7 @@ from claude_usage.cli.session_summary import (
     ActionRecord,
     SessionSummary,
     render_json,
+    render_text,
 )
 
 
@@ -1521,3 +1522,54 @@ class TestRenderJson:
         """render_json returns the bare document; run() adds the newline."""
         output = render_json(self._make_summary())
         assert not output.endswith("\n")
+
+
+class TestRenderText:
+    """Unit tests for render_text() human-readable debug view."""
+
+    def _make_summary(
+        self,
+        stopped_naturally: bool | None = True,
+        actions: list[str] | None = None,
+    ) -> SessionSummary:
+        """Factory for SessionSummary instances used in render_text tests."""
+        return SessionSummary(
+            project="my-project",
+            intent="Build something useful",
+            actions=actions if actions is not None
+                else ["Edited foo.py", "Ran pytest"],
+            stopped_naturally=stopped_naturally,
+        )
+
+    def test_render_text_happy_path(self) -> None:
+        """Full debug-view string matches expected template."""
+        summary = self._make_summary(stopped_naturally=True)
+        output = render_text(summary)
+        assert "Project: my-project" in output
+        assert "Intent: Build something useful" in output
+        assert "Stopped naturally: yes" in output
+        assert "Actions:" in output
+        assert "  - Edited foo.py" in output
+        assert "  - Ran pytest" in output
+
+    def test_render_text_stopped_naturally_true(self) -> None:
+        """True → 'yes'."""
+        output = render_text(self._make_summary(stopped_naturally=True))
+        assert "Stopped naturally: yes" in output
+
+    def test_render_text_stopped_naturally_false(self) -> None:
+        """False → 'no'."""
+        output = render_text(self._make_summary(stopped_naturally=False))
+        assert "Stopped naturally: no" in output
+
+    def test_render_text_stopped_naturally_none(self) -> None:
+        """None → 'unknown'."""
+        output = render_text(self._make_summary(stopped_naturally=None))
+        assert "Stopped naturally: unknown" in output
+
+    def test_render_text_empty_actions(self) -> None:
+        """Empty actions list → 'Actions:' section present, no bullets."""
+        summary = self._make_summary(actions=[])
+        output = render_text(summary)
+        assert "Actions:" in output
+        assert "  - " not in output

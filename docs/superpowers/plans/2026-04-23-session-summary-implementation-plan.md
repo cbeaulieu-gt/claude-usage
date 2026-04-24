@@ -5337,7 +5337,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   ```python
   class TestRenderText:
@@ -5391,7 +5391,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert "  - " not in output
   ```
 
-- [ ] **Step 2: Run → confirm all five tests fail.**
+- [x] **Step 2: Run → confirm all five tests fail.**
 
   ```bash
   uv run pytest tests/test_session_summary.py::TestRenderText -v
@@ -5399,7 +5399,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all fail with `NotImplementedError` from the Task 4.4 stub.
 
-- [ ] **Step 3: Implement `render_text` and `_tri_state_to_word`.**
+- [x] **Step 3: Implement `render_text` and `_tri_state_to_word`.**
 
   ```python
   def _tri_state_to_word(value: bool | None) -> str:
@@ -5455,7 +5455,7 @@ where `K` is the count of dropped entries — is appended. Setting
       return "\n".join(lines)
   ```
 
-- [ ] **Step 4: Run → all five tests pass; run full suite.**
+- [x] **Step 4: Run → all five tests pass; run full suite.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -v
@@ -5463,7 +5463,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
