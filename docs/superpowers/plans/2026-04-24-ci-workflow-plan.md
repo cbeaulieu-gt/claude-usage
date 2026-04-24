@@ -15,10 +15,10 @@
 - [x] **1.2** Verify `uv pip install -e .[dev]` resolves cleanly in the worktree; capture the installed ruff + pytest versions in the commit message.
 
 ### Phase 2 — Lint cleanup (pre-existing errors)
-- [ ] **2.1** Run `ruff check .` to produce the baseline. Confirm 10 errors (F401 unused imports in tests + one E741 `l` in `test_e2e.py`).
-- [ ] **2.2** Fix each error with the minimum diff. Remove unused imports; rename `l` to something descriptive (`line` or `record` — pick based on usage).
-- [ ] **2.3** Re-run `ruff check .` — must exit 0.
-- [ ] **2.4** Full pytest suite — must pass (`151 passed`).
+- [x] **2.1** Run `ruff check .` to produce the baseline. Confirm 10 errors (F401 unused imports in tests + one E741 `l` in `test_e2e.py`).
+- [x] **2.2** Fix each error with the minimum diff. Remove unused imports; rename `l` to something descriptive (`line` or `record` — pick based on usage).
+- [x] **2.3** Re-run `ruff check .` — must exit 0.
+- [x] **2.4** Full pytest suite — must pass (`151 passed`).
 
 ### Phase 3 — Format drift
 - [ ] **3.1** Run `ruff format .` — should touch exactly 16 files per pre-existing baseline. Commit as a single mechanical change so review diff is scannable.

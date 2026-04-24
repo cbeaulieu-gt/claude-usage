@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
-
-from claude_usage.models import SkillInvokedEvent, SkillPassedEvent
 from claude_usage.skill_tracking import (
     parse_skill_tracking,
     extract_skills_from_prompt,

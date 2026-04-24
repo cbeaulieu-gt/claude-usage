@@ -7,9 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
-
 def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     """Helper: run `python -m claude_usage` with the given args."""
     return subprocess.run(

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from claude_usage.aggregator import compute_skill_adoption
 from claude_usage.models import SkillInvokedEvent, SkillPassedEvent
 

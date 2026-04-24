@@ -133,7 +133,7 @@ class TestSubagentModelAttribution:
         ]
 
         (project_dir / f"{session_id}.jsonl").write_text(
-            "\n".join(json.dumps(l) for l in parent_lines), encoding="utf-8"
+            "\n".join(json.dumps(rec) for rec in parent_lines), encoding="utf-8"
         )
 
         # Subagent directory
@@ -177,7 +177,7 @@ class TestSubagentModelAttribution:
         ]
 
         (subagent_dir / "agent-debugger1.jsonl").write_text(
-            "\n".join(json.dumps(l) for l in sub_lines), encoding="utf-8"
+            "\n".join(json.dumps(rec) for rec in sub_lines), encoding="utf-8"
         )
 
         return tmp_path
