@@ -603,47 +603,59 @@ def build_session_summary(
     )
 
 
+def _summary_to_dict(summary: SessionSummary) -> dict:
+    """Convert a SessionSummary to an ordered dict matching the JSON contract.
+
+    Key order matches the spec: project → intent → actions →
+    stoppedNaturally.  Python 3.7+ preserves insertion order, so
+    ``json.dumps`` will emit keys in this sequence.
+
+    Args:
+        summary: The session summary to convert.
+
+    Returns:
+        An ordered dict with camelCase keys ready for ``json.dumps``.
+    """
+    return {
+        "project": summary.project,
+        "intent": summary.intent,
+        "actions": summary.actions,
+        "stoppedNaturally": summary.stopped_naturally,
+    }
+
+
 def render_json(summary: SessionSummary) -> str:
     """Render a SessionSummary as a pretty-printed JSON string.
 
-    Key order matches the output contract: project, intent, actions,
-    stoppedNaturally. Uses json.dumps with indent=2 and ensure_ascii=False.
+    Uses ``indent=2`` and ``ensure_ascii=False`` per the output
+    contract. Key order is deterministic: project, intent, actions,
+    stoppedNaturally.
 
     Args:
-        summary: The session summary to serialise.
+        summary: The session summary dataclass instance.
 
     Returns:
-        A JSON string ending with a trailing newline.
-
-    Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
+        A JSON string, not terminated with a newline (the caller
+        adds exactly one trailing newline before printing to stdout).
     """
-    raise NotImplementedError("render_json — implemented in Phase 3")
+    return json.dumps(
+        _summary_to_dict(summary), indent=2, ensure_ascii=False
+    )
 
 
 def render_text(summary: SessionSummary) -> str:
     """Render a SessionSummary as a human-readable debug string.
 
-    Output format::
-
-        Project: <project>
-        Intent: <intent>
-        Stopped naturally: yes | no | unknown
-
-        Actions:
-          - <action 1>
-          - <action 2>
-
     Args:
-        summary: The session summary to render.
+        summary: The session summary dataclass instance.
 
     Returns:
-        A multi-line string suitable for writing to stdout.
+        Multi-line human-readable string.
 
     Raises:
-        NotImplementedError: Temporarily, until Phase 3 fills this in.
+        NotImplementedError: Until Task 5.2 is implemented.
     """
-    raise NotImplementedError("render_text — implemented in Phase 3")
+    raise NotImplementedError("implemented in Task 5.2")
 
 
 def build_parser(
@@ -736,5 +748,30 @@ def run(args: argparse.Namespace) -> int:
         )
         return EXIT_NO_USER_TURNS
 
-    # Remaining logic lands in Task 4.4.
-    raise NotImplementedError("remaining logic lands in Task 4.4")
+    # ── Success path (exit 0) ────────────────────────────────────────
+    # Non-fatal warning: malformed lines were skipped.
+    skipped = non_blank_lines - len(entries)
+    if skipped > 0:
+        print(
+            f"session-summary: skipped {skipped} malformed line(s)"
+            f" in '{path}'",
+            file=sys.stderr,
+        )
+
+    # run() is the single I/O site. Pass already-parsed entries so
+    # build_session_summary performs no file I/O.
+    slug = path.parent.name if path.parent.name else None
+    summary = build_session_summary(
+        entries,
+        project_slug_fallback=slug,
+        max_actions=args.max_actions,
+    )
+
+    if args.output_format == "json":
+        output = render_json(summary)
+    else:
+        output = render_text(summary)
+
+    # Exactly one trailing newline — the JSON/text contract.
+    print(output, flush=True)
+    return EXIT_OK

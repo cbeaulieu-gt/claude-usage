@@ -1400,3 +1400,62 @@ class TestErrorPaths:
                 "No such file or directory",
             )
         )
+
+
+class TestStdoutStderrDiscipline:
+    """stdout/stderr contract: errors → stderr only; success → stdout only."""
+
+    def test_stdout_on_error_is_empty(self, tmp_path: pytest.fixture) -> None:
+        """Any error path must emit nothing to stdout.
+
+        Uses the missing-file path (exit 1) as a representative error.
+        Asserts stdout is completely empty and stderr is exactly one line.
+        """
+        nonexistent = tmp_path / "missing.jsonl"
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(nonexistent),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.stdout == ""
+        # stderr must be exactly one non-empty line
+        stderr_lines = [
+            ln for ln in result.stderr.splitlines() if ln.strip()
+        ]
+        assert len(stderr_lines) == 1
+
+    def test_stdout_on_success_is_pure_json(self) -> None:
+        """Success path stdout is a parseable JSON document, nothing else.
+
+        Asserts:
+          - ``json.loads(stdout)`` succeeds without error.
+          - stdout has exactly one trailing newline (no header text,
+            no progress banners, no leading whitespace).
+          - All four contract keys are present.
+        """
+        fixture = (
+            _Path("tests/fixtures/session_summaries") / "happy_path.jsonl"
+        )
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "claude_usage",
+                "session-summary",
+                "--path", str(fixture),
+                "--format", "json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        # Must parse cleanly — no leading/trailing non-JSON text
+        parsed = _json.loads(result.stdout)
+        assert set(parsed.keys()) >= {
+            "project", "intent", "actions", "stoppedNaturally"
+        }
+        # Exactly one trailing newline — the JSON document ends cleanly
+        assert result.stdout.endswith("\n")
+        assert not result.stdout.endswith("\n\n")

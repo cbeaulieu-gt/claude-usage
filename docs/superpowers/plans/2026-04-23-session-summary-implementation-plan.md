@@ -4900,7 +4900,7 @@ where `K` is the count of dropped entries — is appended. Setting
 
 ---
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   ```python
   class TestStdoutStderrDiscipline:
@@ -4962,7 +4962,7 @@ where `K` is the count of dropped entries — is appended. Setting
           assert not result.stdout.endswith("\n\n")
   ```
 
-- [ ] **Step 2: Run → confirm both tests fail.**
+- [x] **Step 2: Run → confirm both tests fail.**
 
   ```bash
   uv run pytest \
@@ -4972,7 +4972,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: `test_stdout_on_success_is_pure_json` fails because the success
   path still hits `NotImplementedError`.
 
-- [ ] **Step 3: Wire the success path and implement `render_json` minimally.**
+- [x] **Step 3: Wire the success path and implement `render_json` minimally.**
 
   First, implement `render_json` and its private helper. The helper produces an
   explicitly ordered dict so key order in the JSON output is deterministic
@@ -5122,7 +5122,7 @@ where `K` is the count of dropped entries — is appended. Setting
       return EXIT_OK
   ```
 
-- [ ] **Step 4: Run → both new tests pass; run the full test file.**
+- [x] **Step 4: Run → both new tests pass; run the full test file.**
 
   ```bash
   uv run pytest tests/test_session_summary.py -v
@@ -5131,7 +5131,7 @@ where `K` is the count of dropped entries — is appended. Setting
   Expected: all tests pass, including all prior error-path tests and the two
   new discipline tests.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
   ```bash
   git -C /i/other/claude-usage/.worktrees/docs-session-summary-plan \
