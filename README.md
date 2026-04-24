@@ -37,6 +37,101 @@ python -m claude_usage --data-dir "D:\other\.claude"
 python -m claude_usage --limit-5h 600000 --limit-7d 4000000 --limit-sonnet-7d 2000000
 ```
 
+## Subcommands
+
+After the subparser refactor, all functionality is accessed through named
+subcommands. Bare `claude-usage` prints help and exits 0.
+
+### `dashboard` — interactive HTML dashboard
+
+```bash
+# Default: last 7 days, opens in browser
+claude-usage dashboard
+
+# Rolling window matching Claude billing buckets
+claude-usage dashboard --window 5h
+claude-usage dashboard --window 7d
+
+# Custom date range
+claude-usage dashboard --from 2026-04-01 --to 2026-04-09
+
+# Output to file instead of opening browser
+claude-usage dashboard --output report.html --no-open
+
+# Custom Claude data directory
+claude-usage dashboard --data-dir "D:\other\.claude"
+
+# Set budget limits for gauge percentages
+claude-usage dashboard --limit-5h 600000 --limit-7d 4000000 \
+    --limit-sonnet-7d 2000000
+
+# Emit JSON (for scripting / CI)
+claude-usage dashboard --format json
+```
+
+All flags are unchanged from the pre-refactor form — only their location
+moved (now under the `dashboard` subparser).
+
+### `session-summary` — deterministic session recap (new in v0.2.0)
+
+Reads a single Claude Code transcript JSONL file and emits a structured
+JSON summary suitable for consumption by the `/whats-next` skill or any
+other tool that needs to know what a session did.
+
+```bash
+claude-usage session-summary --path ~/.claude/projects/<hash>/<session>.jsonl
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--path PATH` | *(required)* | Path to the transcript JSONL file |
+| `--format {json,text}` | `json` | Output format. `json` is the machine-readable contract; `text` is a human-readable debug view |
+| `--max-actions N` | `50` | Cap on emitted actions. `0` disables the cap |
+
+**Sample output (`--format json`):**
+
+```json
+{
+  "project": "claude-usage",
+  "intent": "Implement the session-summary subcommand for the /whats-next skill",
+  "actions": [
+    "Edited claude_usage/cli/session_summary.py",
+    "Created tests/test_session_summary.py",
+    "Ran pytest tests/test_session_summary.py -x",
+    "Dispatched code-reviewer sub-agent"
+  ],
+  "stoppedNaturally": true
+}
+```
+
+**Exit codes:**
+
+| Code | Meaning | stderr |
+|---|---|---|
+| `0` | Success — JSON written to stdout | *(silent)* |
+| `1` | IO failure reading `--path` (file missing, permission denied, etc.) | `session-summary: cannot read transcript at '<path>': <OSError class>: <message>` |
+| `2` | File readable but contains no external user turns (empty session, zero-byte file, whitespace-only file) | `session-summary: transcript '<path>' contains no user turns` |
+| `3` | File has content but none of it parses as JSONL | `session-summary: transcript '<path>' is not valid JSONL` |
+
+On any non-zero exit, stdout is empty and stderr contains exactly one line.
+
+### Migration note
+
+The old flag-only form **no longer works** after v0.2.0:
+
+```bash
+# REMOVED — will print help and exit 0, not run the dashboard
+claude-usage --format json
+
+# CORRECT — migrate all callers to:
+claude-usage dashboard --format json
+```
+
+Any script, skill, or CI step that invokes `claude-usage` with bare flags
+(no subcommand) must be updated to use `claude-usage dashboard [flags]`.
+
 ## Dashboard
 
 The generated HTML dashboard includes:
