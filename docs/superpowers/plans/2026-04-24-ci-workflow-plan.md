@@ -21,9 +21,9 @@
 - [x] **2.4** Full pytest suite — must pass (`151 passed`).
 
 ### Phase 3 — Format drift
-- [ ] **3.1** Run `ruff format .` — should touch exactly 16 files per pre-existing baseline. Commit as a single mechanical change so review diff is scannable.
-- [ ] **3.2** Re-run `ruff format --check .` — must exit 0.
-- [ ] **3.3** Full pytest suite — must pass.
+- [x] **3.1** Run `ruff format .` — should touch exactly 16 files per pre-existing baseline. Commit as a single mechanical change so review diff is scannable.
+- [x] **3.2** Re-run `ruff format --check .` — must exit 0.
+- [x] **3.3** Full pytest suite — must pass.
 
 ### Phase 4 — CI workflow
 - [ ] **4.1** Write `.github/workflows/ci.yml` with:

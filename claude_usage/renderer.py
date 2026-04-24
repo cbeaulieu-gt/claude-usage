@@ -59,7 +59,10 @@ def render(
 
     if output_path is None:
         tmp = NamedTemporaryFile(
-            suffix=".html", prefix="claude-usage-", delete=False, mode="w",
+            suffix=".html",
+            prefix="claude-usage-",
+            delete=False,
+            mode="w",
             encoding="utf-8",
         )
         tmp.write(html)

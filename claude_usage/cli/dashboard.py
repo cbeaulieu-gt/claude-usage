@@ -27,9 +27,7 @@ def _parse_window(window_str: str) -> float:
     Raises:
         argparse.ArgumentTypeError: If the format is not recognised.
     """
-    match = re.match(
-        r"^(\d+(?:\.\d+)?)(h|d)$", window_str.strip().lower()
-    )
+    match = re.match(r"^(\d+(?:\.\d+)?)(h|d)$", window_str.strip().lower())
     if not match:
         raise argparse.ArgumentTypeError(
             f"Invalid window format: '{window_str}'. Use e.g. '5h' or '7d'."
@@ -79,49 +77,59 @@ def build_parser(parent: argparse._SubParsersAction) -> argparse.ArgumentParser:
         "--data-dir",
         type=Path,
         default=Path.home() / ".claude",
-        help=(
-            "Path to Claude Code data directory (default: ~/.claude)"
-        ),
+        help=("Path to Claude Code data directory (default: ~/.claude)"),
     )
     p.add_argument(
-        "--from", dest="from_date", type=_parse_date,
-        help=(
-            "Start date (YYYY-MM-DD). Only include data on or after this date."
-        ),
+        "--from",
+        dest="from_date",
+        type=_parse_date,
+        help=("Start date (YYYY-MM-DD). Only include data on or after this date."),
     )
     p.add_argument(
-        "--to", dest="to_date", type=_parse_date,
-        help=(
-            "End date (YYYY-MM-DD). Only include data before this date."
-        ),
+        "--to",
+        dest="to_date",
+        type=_parse_date,
+        help=("End date (YYYY-MM-DD). Only include data before this date."),
     )
     p.add_argument(
-        "--window", type=_parse_window,
+        "--window",
+        type=_parse_window,
         help="Rolling window (e.g. '5h', '7d'). Overrides --from.",
     )
     p.add_argument(
-        "--output", "-o", type=Path,
+        "--output",
+        "-o",
+        type=Path,
         help="Output file path. If omitted, writes to a temp file.",
     )
     p.add_argument(
-        "--no-open", action="store_true",
+        "--no-open",
+        action="store_true",
         help="Don't open the dashboard in a browser.",
     )
     p.add_argument(
-        "--limit-5h", type=int, default=None,
+        "--limit-5h",
+        type=int,
+        default=None,
         help="Token budget for 5-hour rolling window.",
     )
     p.add_argument(
-        "--limit-7d", type=int, default=None,
+        "--limit-7d",
+        type=int,
+        default=None,
         help="Token budget for 7-day rolling window.",
     )
     p.add_argument(
-        "--limit-sonnet-7d", type=int, default=None,
+        "--limit-sonnet-7d",
+        type=int,
+        default=None,
         help="Token budget for Sonnet-only 7-day window.",
     )
     p.add_argument(
-        "--format", dest="output_format",
-        choices=["html", "json"], default="html",
+        "--format",
+        dest="output_format",
+        choices=["html", "json"],
+        default="html",
         help=(
             "Output format: 'html' (default) opens a dashboard; "
             "'json' writes structured data to stdout."
@@ -161,6 +169,7 @@ def run(args: argparse.Namespace) -> int:
     passed_events, invoked_events = parse_skill_tracking(args.data_dir)
     if passed_events or invoked_events:
         from claude_usage.aggregator import compute_skill_adoption
+
         result.by_skill_adoption = compute_skill_adoption(
             passed_events,
             invoked_events,

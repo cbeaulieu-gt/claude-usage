@@ -20,12 +20,17 @@ class TestParseSkillTracking:
 
     def test_parses_skill_invoked_event(self, tmp_path: Path):
         log = tmp_path / "skill-tracking.jsonl"
-        log.write_text(json.dumps({
-            "event": "skill_invoked",
-            "skill": "python",
-            "timestamp": "2026-04-09T21:00:00Z",
-            "session_id": "sess-001",
-        }) + "\n")
+        log.write_text(
+            json.dumps(
+                {
+                    "event": "skill_invoked",
+                    "skill": "python",
+                    "timestamp": "2026-04-09T21:00:00Z",
+                    "session_id": "sess-001",
+                }
+            )
+            + "\n"
+        )
         passed, invoked = parse_skill_tracking(tmp_path)
         assert len(passed) == 0
         assert len(invoked) == 1
@@ -34,13 +39,18 @@ class TestParseSkillTracking:
 
     def test_parses_skill_passed_event(self, tmp_path: Path):
         log = tmp_path / "skill-tracking.jsonl"
-        log.write_text(json.dumps({
-            "event": "skill_passed",
-            "skill": "superpowers:test-driven-development",
-            "target_agent": "code-writer",
-            "timestamp": "2026-04-09T21:00:00Z",
-            "session_id": "sess-001",
-        }) + "\n")
+        log.write_text(
+            json.dumps(
+                {
+                    "event": "skill_passed",
+                    "skill": "superpowers:test-driven-development",
+                    "target_agent": "code-writer",
+                    "timestamp": "2026-04-09T21:00:00Z",
+                    "session_id": "sess-001",
+                }
+            )
+            + "\n"
+        )
         passed, invoked = parse_skill_tracking(tmp_path)
         assert len(passed) == 1
         assert passed[0].skill == "superpowers:test-driven-development"
@@ -50,9 +60,32 @@ class TestParseSkillTracking:
     def test_parses_mixed_events(self, tmp_path: Path):
         log = tmp_path / "skill-tracking.jsonl"
         lines = [
-            json.dumps({"event": "skill_passed", "skill": "python", "target_agent": "code-writer", "timestamp": "2026-04-09T21:00:00Z", "session_id": "s1"}),
-            json.dumps({"event": "skill_invoked", "skill": "python", "timestamp": "2026-04-09T21:01:00Z", "session_id": "s1"}),
-            json.dumps({"event": "skill_passed", "skill": "powershell", "target_agent": "debugger", "timestamp": "2026-04-09T21:02:00Z", "session_id": "s1"}),
+            json.dumps(
+                {
+                    "event": "skill_passed",
+                    "skill": "python",
+                    "target_agent": "code-writer",
+                    "timestamp": "2026-04-09T21:00:00Z",
+                    "session_id": "s1",
+                }
+            ),
+            json.dumps(
+                {
+                    "event": "skill_invoked",
+                    "skill": "python",
+                    "timestamp": "2026-04-09T21:01:00Z",
+                    "session_id": "s1",
+                }
+            ),
+            json.dumps(
+                {
+                    "event": "skill_passed",
+                    "skill": "powershell",
+                    "target_agent": "debugger",
+                    "timestamp": "2026-04-09T21:02:00Z",
+                    "session_id": "s1",
+                }
+            ),
         ]
         log.write_text("\n".join(lines) + "\n")
         passed, invoked = parse_skill_tracking(tmp_path)
@@ -63,7 +96,14 @@ class TestParseSkillTracking:
         log = tmp_path / "skill-tracking.jsonl"
         lines = [
             "not valid json",
-            json.dumps({"event": "skill_invoked", "skill": "python", "timestamp": "2026-04-09T21:00:00Z", "session_id": "s1"}),
+            json.dumps(
+                {
+                    "event": "skill_invoked",
+                    "skill": "python",
+                    "timestamp": "2026-04-09T21:00:00Z",
+                    "session_id": "s1",
+                }
+            ),
             json.dumps({"event": "unknown_event", "skill": "x"}),
         ]
         log.write_text("\n".join(lines) + "\n")
@@ -75,9 +115,12 @@ class TestParseSkillTracking:
 class TestExtractSkillsFromPrompt:
     def setup_method(self):
         self.allowlist = {
-            "python", "powershell", "git",
+            "python",
+            "powershell",
+            "git",
             "superpowers:test-driven-development",
-            "superpowers:brainstorming", "commit-commands:commit",
+            "superpowers:brainstorming",
+            "commit-commands:commit",
         }
 
     def test_backtick_quoted_skill(self):
@@ -102,8 +145,7 @@ class TestExtractSkillsFromPrompt:
 
     def test_multiple_skills_in_prompt(self):
         prompt = (
-            "Use the `python` skill and invoke "
-            "`superpowers:brainstorming` first."
+            "Use the `python` skill and invoke " "`superpowers:brainstorming` first."
         )
         result = extract_skills_from_prompt(prompt, self.allowlist)
         assert result == ["python", "superpowers:brainstorming"]
@@ -144,9 +186,7 @@ class TestExtractSkillsFromPrompt:
     def test_namespaced_backtick_always_accepted(self):
         """Namespaced skills in backticks need no 'skill' word nearby —
         the colon makes them unambiguous."""
-        prompt = (
-            "Use `superpowers:test-driven-development` before coding"
-        )
+        prompt = "Use `superpowers:test-driven-development` before coding"
         result = extract_skills_from_prompt(prompt, self.allowlist)
         assert result == ["superpowers:test-driven-development"]
 
@@ -189,7 +229,15 @@ class TestBuildSkillAllowlist:
         assert "powershell" in result
 
     def test_reads_plugin_skills_with_prefix(self, tmp_path: Path):
-        plugin_skills = tmp_path / "plugins" / "cache" / "official" / "superpowers" / "5.0.7" / "skills"
+        plugin_skills = (
+            tmp_path
+            / "plugins"
+            / "cache"
+            / "official"
+            / "superpowers"
+            / "5.0.7"
+            / "skills"
+        )
         (plugin_skills / "brainstorming").mkdir(parents=True)
         (plugin_skills / "test-driven-development").mkdir(parents=True)
         result = build_skill_allowlist(tmp_path)

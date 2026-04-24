@@ -15,8 +15,12 @@ class TestComputeSkillAdoption:
 
     def test_passed_but_never_invoked(self):
         passed = [
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
-            SkillPassedEvent("python", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
+            SkillPassedEvent(
+                "python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
+            SkillPassedEvent(
+                "python", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
         ]
         result = compute_skill_adoption(passed, [])
         assert result["python"]["times_passed"] == 2
@@ -27,17 +31,26 @@ class TestComputeSkillAdoption:
 
     def test_invoked_without_pass(self):
         invoked = [
-            SkillInvokedEvent("python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
         ]
         result = compute_skill_adoption([], invoked)
         assert result == {}
 
     def test_full_adoption(self):
         passed = [
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc), "s1"),
+            SkillPassedEvent(
+                "python",
+                "code-writer",
+                datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc),
+                "s1",
+            ),
         ]
         invoked = [
-            SkillInvokedEvent("python", datetime(2026, 4, 9, 12, 1, tzinfo=timezone.utc), "s1"),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, 12, 1, tzinfo=timezone.utc), "s1"
+            ),
         ]
         result = compute_skill_adoption(passed, invoked)
         assert result["python"]["times_passed"] == 1
@@ -46,13 +59,23 @@ class TestComputeSkillAdoption:
 
     def test_partial_adoption(self):
         passed = [
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s2"),
-            SkillPassedEvent("python", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s3"),
+            SkillPassedEvent(
+                "python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
+            SkillPassedEvent(
+                "python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s2"
+            ),
+            SkillPassedEvent(
+                "python", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s3"
+            ),
         ]
         invoked = [
-            SkillInvokedEvent("python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
-            SkillInvokedEvent("python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s2"),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s2"
+            ),
         ]
         result = compute_skill_adoption(passed, invoked)
         assert result["python"]["times_passed"] == 3
@@ -61,11 +84,20 @@ class TestComputeSkillAdoption:
 
     def test_multiple_skills(self):
         passed = [
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
-            SkillPassedEvent("powershell", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
+            SkillPassedEvent(
+                "python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
+            SkillPassedEvent(
+                "powershell",
+                "debugger",
+                datetime(2026, 4, 9, tzinfo=timezone.utc),
+                "s1",
+            ),
         ]
         invoked = [
-            SkillInvokedEvent("python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
         ]
         result = compute_skill_adoption(passed, invoked)
         assert result["python"]["adoption_rate"] == 1.0
@@ -73,13 +105,23 @@ class TestComputeSkillAdoption:
 
     def test_per_agent_breakdown(self):
         passed = [
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s2"),
-            SkillPassedEvent("python", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s3"),
+            SkillPassedEvent(
+                "python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
+            SkillPassedEvent(
+                "python", "code-writer", datetime(2026, 4, 9, tzinfo=timezone.utc), "s2"
+            ),
+            SkillPassedEvent(
+                "python", "debugger", datetime(2026, 4, 9, tzinfo=timezone.utc), "s3"
+            ),
         ]
         invoked = [
-            SkillInvokedEvent("python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"),
-            SkillInvokedEvent("python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s3"),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s1"
+            ),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, tzinfo=timezone.utc), "s3"
+            ),
         ]
         result = compute_skill_adoption(passed, invoked)
         agents = result["python"]["by_target_agent"]
@@ -91,12 +133,26 @@ class TestComputeSkillAdoption:
     def test_time_filtering(self):
         cutoff = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
         passed = [
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, 11, 0, tzinfo=timezone.utc), "s1"),
-            SkillPassedEvent("python", "code-writer", datetime(2026, 4, 9, 13, 0, tzinfo=timezone.utc), "s2"),
+            SkillPassedEvent(
+                "python",
+                "code-writer",
+                datetime(2026, 4, 9, 11, 0, tzinfo=timezone.utc),
+                "s1",
+            ),
+            SkillPassedEvent(
+                "python",
+                "code-writer",
+                datetime(2026, 4, 9, 13, 0, tzinfo=timezone.utc),
+                "s2",
+            ),
         ]
         invoked = [
-            SkillInvokedEvent("python", datetime(2026, 4, 9, 11, 1, tzinfo=timezone.utc), "s1"),
-            SkillInvokedEvent("python", datetime(2026, 4, 9, 13, 1, tzinfo=timezone.utc), "s2"),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, 11, 1, tzinfo=timezone.utc), "s1"
+            ),
+            SkillInvokedEvent(
+                "python", datetime(2026, 4, 9, 13, 1, tzinfo=timezone.utc), "s2"
+            ),
         ]
         result = compute_skill_adoption(passed, invoked, from_date=cutoff)
         assert result["python"]["times_passed"] == 1

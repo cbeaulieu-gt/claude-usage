@@ -18,9 +18,7 @@ FIXTURE_DIR = (
     / "dashboard_baseline_input"
 )
 SNAPSHOT_FILE = (
-    Path(__file__).parent
-    / "fixtures"
-    / "dashboard_snapshot_pre_refactor.json"
+    Path(__file__).parent / "fixtures" / "dashboard_snapshot_pre_refactor.json"
 )
 
 
@@ -38,19 +36,25 @@ def test_existing_dashboard_unchanged() -> None:
     """
     result = subprocess.run(
         [
-            sys.executable, "-m", "claude_usage",
+            sys.executable,
+            "-m",
+            "claude_usage",
             "dashboard",
-            "--from", "2026-01-01",
-            "--to", "2026-12-31",
-            "--format", "json",
-            "--data-dir", str(FIXTURE_DIR),
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-12-31",
+            "--format",
+            "json",
+            "--data-dir",
+            str(FIXTURE_DIR),
         ],
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, (
-        f"dashboard exited {result.returncode}.\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"dashboard exited {result.returncode}.\nstderr: {result.stderr}"
 
     actual = json.loads(result.stdout)
     expected = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))

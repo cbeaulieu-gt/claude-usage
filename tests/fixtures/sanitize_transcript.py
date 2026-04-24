@@ -43,10 +43,7 @@ def _sanitize_entry(entry: dict) -> dict:
     Returns:
         A new dict with identifying fields removed and content sanitized.
     """
-    result = {
-        k: v for k, v in entry.items()
-        if k not in _OMIT_TOP_LEVEL_KEYS
-    }
+    result = {k: v for k, v in entry.items() if k not in _OMIT_TOP_LEVEL_KEYS}
     msg = result.get("message")
     if isinstance(msg, dict):
         content = msg.get("content")
