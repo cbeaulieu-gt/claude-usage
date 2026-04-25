@@ -25,3 +25,15 @@ Thumbs.db
 # Generated reports
 *.html
 !templates/*.html
+
+# Claude Code
+.claude/
+
+# Test & lint caches
+.pytest_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
