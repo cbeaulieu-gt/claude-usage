@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from claude_usage.models import SkillInvokedEvent, SkillPassedEvent
@@ -44,21 +44,25 @@ def parse_skill_tracking(
         event_type = entry.get("event")
         if event_type == "skill_passed":
             try:
-                passed.append(SkillPassedEvent(
-                    skill=entry["skill"],
-                    target_agent=entry["target_agent"],
-                    timestamp=_parse_timestamp(entry["timestamp"]),
-                    session_id=entry["session_id"],
-                ))
+                passed.append(
+                    SkillPassedEvent(
+                        skill=entry["skill"],
+                        target_agent=entry["target_agent"],
+                        timestamp=_parse_timestamp(entry["timestamp"]),
+                        session_id=entry["session_id"],
+                    )
+                )
             except (KeyError, ValueError):
                 continue
         elif event_type == "skill_invoked":
             try:
-                invoked.append(SkillInvokedEvent(
-                    skill=entry["skill"],
-                    timestamp=_parse_timestamp(entry["timestamp"]),
-                    session_id=entry["session_id"],
-                ))
+                invoked.append(
+                    SkillInvokedEvent(
+                        skill=entry["skill"],
+                        timestamp=_parse_timestamp(entry["timestamp"]),
+                        session_id=entry["session_id"],
+                    )
+                )
             except (KeyError, ValueError):
                 continue
 
@@ -103,9 +107,7 @@ def build_skill_allowlist(claude_dir: Path) -> set[str]:
 
 
 # Patterns for extracting skill references from Agent dispatch prompts
-_BACKTICK_PATTERN = re.compile(
-    r"`([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)`"
-)
+_BACKTICK_PATTERN = re.compile(r"`([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)`")
 _PHRASE_PATTERNS = [
     re.compile(
         r"[Uu]se (?:the )?[\"']?"
@@ -120,9 +122,7 @@ _PHRASE_PATTERNS = [
         re.IGNORECASE,
     ),
     re.compile(
-        r"[Uu]se skill:?\s*[\"']?"
-        r"([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)"
-        r"[\"']?",
+        r"[Uu]se skill:?\s*[\"']?" r"([a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)" r"[\"']?",
         re.IGNORECASE,
     ),
 ]

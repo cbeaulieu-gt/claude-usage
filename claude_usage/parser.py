@@ -44,9 +44,7 @@ def _extract_skill(content: list[dict]) -> str | None:
     return None
 
 
-def _parse_jsonl_messages(
-    jsonl_path: Path, agent_type: str
-) -> list[MessageRecord]:
+def _parse_jsonl_messages(jsonl_path: Path, agent_type: str) -> list[MessageRecord]:
     """Parse assistant messages from a JSONL file, attributing to agent_type."""
     messages: list[MessageRecord] = []
     with open(jsonl_path, "r", encoding="utf-8") as f:
@@ -88,9 +86,7 @@ def _parse_jsonl_messages(
     return messages
 
 
-def _parse_session(
-    jsonl_path: Path, project_name: str
-) -> SessionRecord | None:
+def _parse_session(jsonl_path: Path, project_name: str) -> SessionRecord | None:
     """Parse a single session JSONL file and its subagents."""
     session_id = jsonl_path.stem
 

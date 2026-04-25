@@ -1,7 +1,12 @@
 # tests/test_models.py
 from datetime import datetime, timezone
 
-from claude_usage.models import MessageRecord, SessionRecord, SkillPassedEvent, SkillInvokedEvent
+from claude_usage.models import (
+    MessageRecord,
+    SessionRecord,
+    SkillPassedEvent,
+    SkillInvokedEvent,
+)
 
 
 class TestMessageRecord:
@@ -37,7 +42,10 @@ class TestMessageRecord:
             model="claude-opus-4-6",
             agent_type="general-purpose",
             skill=None,
-            input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_creation_tokens=0,
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
         )
         assert msg.model_short == "opus"
 
@@ -47,7 +55,10 @@ class TestMessageRecord:
             model="claude-sonnet-4-6",
             agent_type="code-writer",
             skill=None,
-            input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_creation_tokens=0,
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
         )
         assert msg.model_short == "sonnet"
 
@@ -57,7 +68,10 @@ class TestMessageRecord:
             model="claude-haiku-4-5-20251001",
             agent_type="ops",
             skill=None,
-            input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_creation_tokens=0,
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
         )
         assert msg.model_short == "haiku"
 
@@ -67,15 +81,26 @@ class TestMessageRecord:
             model="claude-future-model-9",
             agent_type="general-purpose",
             skill=None,
-            input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_creation_tokens=0,
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
         )
         assert msg.model_short == "claude-future-model-9"
 
 
 class TestSessionRecord:
-    def _make_msg(self, model="claude-opus-4-6", agent="general-purpose",
-                  input_t=100, output_t=50, cache_read=0, cache_create=0,
-                  skill=None, ts=None):
+    def _make_msg(
+        self,
+        model="claude-opus-4-6",
+        agent="general-purpose",
+        input_t=100,
+        output_t=50,
+        cache_read=0,
+        cache_create=0,
+        skill=None,
+        ts=None,
+    ):
         return MessageRecord(
             timestamp=ts or datetime(2026, 4, 9, 12, 0, 0, tzinfo=timezone.utc),
             model=model,
@@ -166,6 +191,7 @@ class TestSkillPassedEvent:
 
     def test_frozen(self):
         import pytest
+
         evt = SkillPassedEvent(
             skill="python",
             target_agent="code-writer",
@@ -188,6 +214,7 @@ class TestSkillInvokedEvent:
 
     def test_frozen(self):
         import pytest
+
         evt = SkillInvokedEvent(
             skill="python",
             timestamp=datetime(2026, 4, 9, tzinfo=timezone.utc),

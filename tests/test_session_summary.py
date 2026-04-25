@@ -101,9 +101,7 @@ class TestBuildSessionSummary:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/happy_path.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/happy_path.jsonl")
         entries = _parse_fixture(fixture)
         summary = build_session_summary(
             entries,
@@ -127,9 +125,7 @@ class TestBuildSessionSummary:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/happy_path.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/happy_path.jsonl")
         summary = build_session_summary(
             _parse_fixture(fixture),
             project_slug_fallback=fixture.parent.name,
@@ -149,17 +145,20 @@ class TestBuildSessionSummary:
         # Fixture with no cwd field anywhere and a non-project-hash path.
         fixture = tmp_path / "no_cwd.jsonl"
         fixture.write_text(
-            json.dumps({
-                "type": "user",
-                "message": {
-                    "role": "user",
-                    "content": "Hello with no cwd.",
-                },
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-nocwd",
-                "userType": "external",
-            }) + "\n",
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": "Hello with no cwd.",
+                    },
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-nocwd",
+                    "userType": "external",
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
         # Pass None as slug_fallback to exercise the final "unknown" path.
@@ -169,7 +168,9 @@ class TestBuildSessionSummary:
         )
         assert summary.project == "unknown"
 
-    def test_intent_plain_text_user_turn(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_intent_plain_text_user_turn(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
         """A plain-text user turn returns the first sentence as intent."""
         import json
 
@@ -177,21 +178,23 @@ class TestBuildSessionSummary:
 
         fixture = tmp_path / "plain_text.jsonl"
         fixture.write_text(
-            json.dumps({
-                "type": "user",
-                "message": {
-                    "role": "user",
-                    "content": (
-                        "Implement the login feature. "
-                        "Make it work with OAuth."
-                    ),
-                },
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-plain",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }) + "\n",
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": (
+                            "Implement the login feature. " "Make it work with OAuth."
+                        ),
+                    },
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-plain",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
         summary = build_session_summary(_parse_fixture(fixture))
@@ -211,15 +214,18 @@ class TestBuildSessionSummary:
             "Fix the parser bug in parser.py. It crashes on empty input."
         )
         fixture.write_text(
-            json.dumps({
-                "type": "user",
-                "message": {"role": "user", "content": content},
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-remind",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }) + "\n",
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"role": "user", "content": content},
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-remind",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
         summary = build_session_summary(_parse_fixture(fixture))
@@ -231,9 +237,7 @@ class TestBuildSessionSummary:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/slash_command_only.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/slash_command_only.jsonl")
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.intent == "Ran /project-review"
 
@@ -249,15 +253,18 @@ class TestBuildSessionSummary:
 
         fixture = tmp_path / "empty_intent.jsonl"
         fixture.write_text(
-            json.dumps({
-                "type": "user",
-                "message": {"role": "user", "content": "   "},
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-empty-intent",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }) + "\n",
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"role": "user", "content": "   "},
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-empty-intent",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
         summary = build_session_summary(_parse_fixture(fixture))
@@ -282,9 +289,7 @@ class TestToolClassification:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        def _make_tool_use(
-            uid: str, name: str, path: str
-        ) -> dict:
+        def _make_tool_use(uid: str, name: str, path: str) -> dict:
             return {
                 "type": "tool_use",
                 "id": uid,
@@ -294,66 +299,83 @@ class TestToolClassification:
 
         fixture = tmp_path / "edit_tools.jsonl"
         lines = [
-            json.dumps({
-                "type": "user",
-                "message": {"role": "user", "content": "Edit three files."},
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-edit",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }),
-            json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [
-                        _make_tool_use("tu-001", "Edit", "src/a.py"),
-                    ],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "tool_use",
-                    "usage": {"input_tokens": 50, "output_tokens": 10,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": "a-001",
-                "timestamp": "2026-04-20T09:00:01.000Z",
-                "sessionId": "sess-edit",
-            }),
-            json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [
-                        _make_tool_use("tu-002", "Write", "src/b.py"),
-                    ],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "tool_use",
-                    "usage": {"input_tokens": 50, "output_tokens": 10,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": "a-002",
-                "timestamp": "2026-04-20T09:00:02.000Z",
-                "sessionId": "sess-edit",
-            }),
-            json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [
-                        _make_tool_use("tu-003", "NotebookEdit", "notebook.ipynb"),
-                    ],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "end_turn",
-                    "usage": {"input_tokens": 50, "output_tokens": 10,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": "a-003",
-                "timestamp": "2026-04-20T09:00:03.000Z",
-                "sessionId": "sess-edit",
-            }),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"role": "user", "content": "Edit three files."},
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-edit",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            _make_tool_use("tu-001", "Edit", "src/a.py"),
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "tool_use",
+                        "usage": {
+                            "input_tokens": 50,
+                            "output_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                        },
+                    },
+                    "uuid": "a-001",
+                    "timestamp": "2026-04-20T09:00:01.000Z",
+                    "sessionId": "sess-edit",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            _make_tool_use("tu-002", "Write", "src/b.py"),
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "tool_use",
+                        "usage": {
+                            "input_tokens": 50,
+                            "output_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                        },
+                    },
+                    "uuid": "a-002",
+                    "timestamp": "2026-04-20T09:00:02.000Z",
+                    "sessionId": "sess-edit",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            _make_tool_use("tu-003", "NotebookEdit", "notebook.ipynb"),
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "end_turn",
+                        "usage": {
+                            "input_tokens": 50,
+                            "output_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                        },
+                    },
+                    "uuid": "a-003",
+                    "timestamp": "2026-04-20T09:00:03.000Z",
+                    "sessionId": "sess-edit",
+                }
+            ),
         ]
         fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -387,42 +409,53 @@ class TestToolClassification:
         ]
 
         lines = [
-            json.dumps({
-                "type": "user",
-                "message": {
-                    "role": "user",
-                    "content": "Look at things but do not change them.",
-                },
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-skip",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": "Look at things but do not change them.",
+                    },
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-skip",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            ),
         ]
         for i, (tool_name, inp) in enumerate(skip_tools, start=1):
-            lines.append(json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": f"tu-{i:03d}",
-                        "name": tool_name,
-                        "input": inp,
-                    }],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": (
-                        "tool_use" if i < len(skip_tools) else "end_turn"
-                    ),
-                    "usage": {"input_tokens": 20, "output_tokens": 5,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": f"a-{i:03d}",
-                "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
-                "sessionId": "sess-skip",
-            }))
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": f"tu-{i:03d}",
+                                    "name": tool_name,
+                                    "input": inp,
+                                }
+                            ],
+                            "model": "claude-sonnet-4-6",
+                            "stop_reason": (
+                                "tool_use" if i < len(skip_tools) else "end_turn"
+                            ),
+                            "usage": {
+                                "input_tokens": 20,
+                                "output_tokens": 5,
+                                "cache_creation_input_tokens": 0,
+                                "cache_read_input_tokens": 0,
+                            },
+                        },
+                        "uuid": f"a-{i:03d}",
+                        "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
+                        "sessionId": "sess-skip",
+                    }
+                )
+            )
 
         fixture = tmp_path / "skip_tools.jsonl"
         fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -456,86 +489,109 @@ class TestToolClassification:
         ps_cmd = "Get-ChildItem -Recurse *.py"
 
         lines = [
-            json.dumps({
-                "type": "user",
-                "message": {
-                    "role": "user",
-                    "content": "Run some bash commands.",
-                },
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-bash",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }),
-            json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": "tu-001",
-                        "name": "Bash",
-                        "input": {
-                            "command": short_cmd,
-                            "description": "Run tests",
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": "Run some bash commands.",
+                    },
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-bash",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "tu-001",
+                                "name": "Bash",
+                                "input": {
+                                    "command": short_cmd,
+                                    "description": "Run tests",
+                                },
+                            }
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "tool_use",
+                        "usage": {
+                            "input_tokens": 30,
+                            "output_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
                         },
-                    }],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "tool_use",
-                    "usage": {"input_tokens": 30, "output_tokens": 10,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": "a-001",
-                "timestamp": "2026-04-20T09:00:01.000Z",
-                "sessionId": "sess-bash",
-            }),
-            json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": "tu-002",
-                        "name": "Bash",
-                        "input": {
-                            "command": long_cmd,
-                            "description": "Run many tests",
+                    },
+                    "uuid": "a-001",
+                    "timestamp": "2026-04-20T09:00:01.000Z",
+                    "sessionId": "sess-bash",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "tu-002",
+                                "name": "Bash",
+                                "input": {
+                                    "command": long_cmd,
+                                    "description": "Run many tests",
+                                },
+                            }
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "tool_use",
+                        "usage": {
+                            "input_tokens": 30,
+                            "output_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
                         },
-                    }],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "tool_use",
-                    "usage": {"input_tokens": 30, "output_tokens": 10,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": "a-002",
-                "timestamp": "2026-04-20T09:00:02.000Z",
-                "sessionId": "sess-bash",
-            }),
-            json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": "tu-003",
-                        "name": "PowerShell",
-                        "input": {
-                            "command": ps_cmd,
+                    },
+                    "uuid": "a-002",
+                    "timestamp": "2026-04-20T09:00:02.000Z",
+                    "sessionId": "sess-bash",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "tu-003",
+                                "name": "PowerShell",
+                                "input": {
+                                    "command": ps_cmd,
+                                },
+                            }
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "end_turn",
+                        "usage": {
+                            "input_tokens": 30,
+                            "output_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
                         },
-                    }],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "end_turn",
-                    "usage": {"input_tokens": 30, "output_tokens": 10,
-                              "cache_creation_input_tokens": 0,
-                              "cache_read_input_tokens": 0},
-                },
-                "uuid": "a-003",
-                "timestamp": "2026-04-20T09:00:03.000Z",
-                "sessionId": "sess-bash",
-            }),
+                    },
+                    "uuid": "a-003",
+                    "timestamp": "2026-04-20T09:00:03.000Z",
+                    "sessionId": "sess-bash",
+                }
+            ),
         ]
         fixture = tmp_path / "bash_tools.jsonl"
         fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -565,43 +621,55 @@ class TestToolClassification:
 
         fixture = tmp_path / "agent_dispatch.jsonl"
         fixture.write_text(
-            "\n".join([
-                json.dumps({
-                    "type": "user",
-                    "message": {
-                        "role": "user",
-                        "content": "Review the code.",
-                    },
-                    "uuid": "u-001",
-                    "timestamp": "2026-04-20T09:00:00.000Z",
-                    "sessionId": "sess-agent",
-                    "userType": "external",
-                    "cwd": "/home/user/myproject",
-                }),
-                json.dumps({
-                    "type": "assistant",
-                    "message": {
-                        "role": "assistant",
-                        "content": [{
-                            "type": "tool_use",
-                            "id": "tu-001",
-                            "name": "Agent",
-                            "input": {
-                                "subagent_type": "code-reviewer",
-                                "description": "Review session_summary.py",
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "user",
+                            "message": {
+                                "role": "user",
+                                "content": "Review the code.",
                             },
-                        }],
-                        "model": "claude-sonnet-4-6",
-                        "stop_reason": "end_turn",
-                        "usage": {"input_tokens": 40, "output_tokens": 15,
-                                  "cache_creation_input_tokens": 0,
-                                  "cache_read_input_tokens": 0},
-                    },
-                    "uuid": "a-001",
-                    "timestamp": "2026-04-20T09:00:01.000Z",
-                    "sessionId": "sess-agent",
-                }),
-            ]) + "\n",
+                            "uuid": "u-001",
+                            "timestamp": "2026-04-20T09:00:00.000Z",
+                            "sessionId": "sess-agent",
+                            "userType": "external",
+                            "cwd": "/home/user/myproject",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {
+                                "role": "assistant",
+                                "content": [
+                                    {
+                                        "type": "tool_use",
+                                        "id": "tu-001",
+                                        "name": "Agent",
+                                        "input": {
+                                            "subagent_type": "code-reviewer",
+                                            "description": "Review session_summary.py",
+                                        },
+                                    }
+                                ],
+                                "model": "claude-sonnet-4-6",
+                                "stop_reason": "end_turn",
+                                "usage": {
+                                    "input_tokens": 40,
+                                    "output_tokens": 15,
+                                    "cache_creation_input_tokens": 0,
+                                    "cache_read_input_tokens": 0,
+                                },
+                            },
+                            "uuid": "a-001",
+                            "timestamp": "2026-04-20T09:00:01.000Z",
+                            "sessionId": "sess-agent",
+                        }
+                    ),
+                ]
+            )
+            + "\n",
             encoding="utf-8",
         )
         summary = build_session_summary(_parse_fixture(fixture))
@@ -629,15 +697,17 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-001",
-                    "name": "Agent",
-                    "input": {
-                        "subagent_type": "code-writer",
-                        "description": "Write the implementation",
-                    },
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": "Agent",
+                        "input": {
+                            "subagent_type": "code-writer",
+                            "description": "Write the implementation",
+                        },
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -680,12 +750,14 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-001",
-                    "name": raw_name,
-                    "input": {"title": "Test issue", "body": "body"},
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": raw_name,
+                        "input": {"title": "Test issue", "body": "body"},
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -728,12 +800,14 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-001",
-                    "name": raw_name,
-                    "input": {"container": "my-bucket"},
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": raw_name,
+                        "input": {"container": "my-bucket"},
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -777,12 +851,14 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-001",
-                    "name": raw_name,
-                    "input": {},
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": raw_name,
+                        "input": {},
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -822,12 +898,14 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-001",
-                    "name": "mcp__plugin_github_github__create_issue",
-                    "input": {"title": "First", "body": "b1"},
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": "mcp__plugin_github_github__create_issue",
+                        "input": {"title": "First", "body": "b1"},
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -845,12 +923,14 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-002",
-                    "name": "mcp__github__create_issue",
-                    "input": {"title": "Second", "body": "b2"},
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-002",
+                        "name": "mcp__github__create_issue",
+                        "input": {"title": "Second", "body": "b2"},
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -878,15 +958,17 @@ class TestToolClassification:
         """
         from claude_usage.cli.session_summary import SKIPPED_TOOLS
 
-        expected = frozenset({
-            "Read",
-            "Grep",
-            "Glob",
-            "Skill",
-            "TodoWrite",
-            "WebFetch",
-            "WebSearch",
-        })
+        expected = frozenset(
+            {
+                "Read",
+                "Grep",
+                "Glob",
+                "Skill",
+                "TodoWrite",
+                "WebFetch",
+                "WebSearch",
+            }
+        )
         assert SKIPPED_TOOLS == expected
 
     def test_action_classification_skips_mix_with_edit(
@@ -913,71 +995,85 @@ class TestToolClassification:
         ]
 
         lines = [
-            json.dumps({
-                "type": "user",
-                "message": {
-                    "role": "user",
-                    "content": "Look at things, then edit one.",
-                },
-                "uuid": "u-001",
-                "timestamp": "2026-04-20T09:00:00.000Z",
-                "sessionId": "sess-mix",
-                "userType": "external",
-                "cwd": "/home/user/myproject",
-            }),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": "Look at things, then edit one.",
+                    },
+                    "uuid": "u-001",
+                    "timestamp": "2026-04-20T09:00:00.000Z",
+                    "sessionId": "sess-mix",
+                    "userType": "external",
+                    "cwd": "/home/user/myproject",
+                }
+            ),
         ]
         for i, (tool_name, inp) in enumerate(skip_tools, start=1):
-            lines.append(json.dumps({
-                "type": "assistant",
-                "message": {
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": f"tu-{i:03d}",
-                        "name": tool_name,
-                        "input": inp,
-                    }],
-                    "model": "claude-sonnet-4-6",
-                    "stop_reason": "tool_use",
-                    "usage": {
-                        "input_tokens": 20,
-                        "output_tokens": 5,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
-                    },
-                },
-                "uuid": f"a-{i:03d}",
-                "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
-                "sessionId": "sess-mix",
-            }))
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": f"tu-{i:03d}",
+                                    "name": tool_name,
+                                    "input": inp,
+                                }
+                            ],
+                            "model": "claude-sonnet-4-6",
+                            "stop_reason": "tool_use",
+                            "usage": {
+                                "input_tokens": 20,
+                                "output_tokens": 5,
+                                "cache_creation_input_tokens": 0,
+                                "cache_read_input_tokens": 0,
+                            },
+                        },
+                        "uuid": f"a-{i:03d}",
+                        "timestamp": f"2026-04-20T09:00:{i:02d}.000Z",
+                        "sessionId": "sess-mix",
+                    }
+                )
+            )
         # One Edit at the end — must survive into the action list.
-        lines.append(json.dumps({
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-008",
-                    "name": "Edit",
-                    "input": {
-                        "file_path": "src/result.py",
-                        "old_string": "x",
-                        "new_string": "y",
+        lines.append(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "tu-008",
+                                "name": "Edit",
+                                "input": {
+                                    "file_path": "src/result.py",
+                                    "old_string": "x",
+                                    "new_string": "y",
+                                },
+                            }
+                        ],
+                        "model": "claude-sonnet-4-6",
+                        "stop_reason": "end_turn",
+                        "usage": {
+                            "input_tokens": 20,
+                            "output_tokens": 5,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                        },
                     },
-                }],
-                "model": "claude-sonnet-4-6",
-                "stop_reason": "end_turn",
-                "usage": {
-                    "input_tokens": 20,
-                    "output_tokens": 5,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
-                },
-            },
-            "uuid": "a-008",
-            "timestamp": "2026-04-20T09:00:08.000Z",
-            "sessionId": "sess-mix",
-        }))
+                    "uuid": "a-008",
+                    "timestamp": "2026-04-20T09:00:08.000Z",
+                    "sessionId": "sess-mix",
+                }
+            )
+        )
 
         fixture = tmp_path / "skip_mix.jsonl"
         fixture.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1008,12 +1104,14 @@ class TestToolClassification:
             "type": "assistant",
             "message": {
                 "role": "assistant",
-                "content": [{
-                    "type": "tool_use",
-                    "id": "tu-001",
-                    "name": "BrandNewTool",
-                    "input": {"some_param": "some_value"},
-                }],
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "tu-001",
+                        "name": "BrandNewTool",
+                        "input": {"some_param": "some_value"},
+                    }
+                ],
                 "model": "claude-sonnet-4-6",
                 "stop_reason": "tool_use",
                 "usage": {
@@ -1054,8 +1152,7 @@ class TestCollapseConsecutive:
         from claude_usage.cli.session_summary import build_session_summary
 
         fixture = Path(
-            "tests/fixtures/session_summaries/"
-            "consecutive_edits_same_file.jsonl"
+            "tests/fixtures/session_summaries/" "consecutive_edits_same_file.jsonl"
         )
         summary = build_session_summary(_parse_fixture(fixture))
 
@@ -1081,20 +1178,20 @@ class TestCollapseConsecutive:
                 "type": "assistant",
                 "message": {
                     "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": f"tu-{seq:03d}",
-                        "name": "Edit",
-                        "input": {
-                            "file_path": file_path,
-                            "old_string": f"old{seq}",
-                            "new_string": f"new{seq}",
-                        },
-                    }],
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": f"tu-{seq:03d}",
+                            "name": "Edit",
+                            "input": {
+                                "file_path": file_path,
+                                "old_string": f"old{seq}",
+                                "new_string": f"new{seq}",
+                            },
+                        }
+                    ],
                     "model": "claude-sonnet-4-6",
-                    "stop_reason": (
-                        "end_turn" if seq == 3 else "tool_use"
-                    ),
+                    "stop_reason": ("end_turn" if seq == 3 else "tool_use"),
                     "usage": {
                         "input_tokens": 30,
                         "output_tokens": 10,
@@ -1147,9 +1244,7 @@ class TestStoppedNaturally:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/happy_path.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/happy_path.jsonl")
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.stopped_naturally is True
 
@@ -1159,9 +1254,7 @@ class TestStoppedNaturally:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/max_tokens_stop.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/max_tokens_stop.jsonl")
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.stopped_naturally is False
 
@@ -1171,9 +1264,7 @@ class TestStoppedNaturally:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/prevented_continuation.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/prevented_continuation.jsonl")
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.stopped_naturally is False
 
@@ -1183,9 +1274,7 @@ class TestStoppedNaturally:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/no_assistant_entries.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/no_assistant_entries.jsonl")
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.stopped_naturally is None
 
@@ -1195,9 +1284,7 @@ class TestStoppedNaturally:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/missing_stop_reason.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/missing_stop_reason.jsonl")
         summary = build_session_summary(_parse_fixture(fixture))
         assert summary.stopped_naturally is None
 
@@ -1215,9 +1302,7 @@ class TestMaxActionsCap:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/over_fifty_actions.jsonl")
         # Default max_actions == 50.
         summary = build_session_summary(_parse_fixture(fixture))
 
@@ -1231,9 +1316,7 @@ class TestMaxActionsCap:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/over_fifty_actions.jsonl")
         summary = build_session_summary(_parse_fixture(fixture), max_actions=5)
 
         assert len(summary.actions) == 5
@@ -1249,16 +1332,12 @@ class TestMaxActionsCap:
 
         from claude_usage.cli.session_summary import build_session_summary
 
-        fixture = Path(
-            "tests/fixtures/session_summaries/over_fifty_actions.jsonl"
-        )
+        fixture = Path("tests/fixtures/session_summaries/over_fifty_actions.jsonl")
         summary = build_session_summary(_parse_fixture(fixture), max_actions=0)
 
         assert len(summary.actions) == 55
         # No sentinel — every element is a real action string.
-        assert not any(
-            a.startswith("… (") for a in summary.actions
-        )
+        assert not any(a.startswith("… (") for a in summary.actions)
 
 
 class TestExitNoUserTurns:
@@ -1267,14 +1346,16 @@ class TestExitNoUserTurns:
     def test_empty_session_exits_2(self) -> None:
         """Agent-setting / system-only transcript → exit 2."""
         fixture = (
-            _Path("tests/fixtures/session_summaries")
-            / "empty_no_user_turns.jsonl"
+            _Path("tests/fixtures/session_summaries") / "empty_no_user_turns.jsonl"
         )
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(fixture),
+                "--path",
+                str(fixture),
             ],
             capture_output=True,
             text=True,
@@ -1289,9 +1370,12 @@ class TestExitNoUserTurns:
         zero_byte.write_text("")
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(zero_byte),
+                "--path",
+                str(zero_byte),
             ],
             capture_output=True,
             text=True,
@@ -1308,9 +1392,12 @@ class TestExitNoUserTurns:
         ws_only.write_text("\n   \n\t\n")
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(ws_only),
+                "--path",
+                str(ws_only),
             ],
             capture_output=True,
             text=True,
@@ -1331,15 +1418,16 @@ class TestExitNotJsonl:
         """
         malformed = tmp_path / "all_malformed.jsonl"
         malformed.write_text(
-            "this is not json\n"
-            "{also not json\n"
-            "definitely: not: json: either\n"
+            "this is not json\n" "{also not json\n" "definitely: not: json: either\n"
         )
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(malformed),
+                "--path",
+                str(malformed),
             ],
             capture_output=True,
             text=True,
@@ -1357,9 +1445,12 @@ class TestExitNotJsonl:
         empty.write_text("")
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(empty),
+                "--path",
+                str(empty),
             ],
             capture_output=True,
             text=True,
@@ -1382,9 +1473,12 @@ class TestErrorPaths:
         nonexistent = tmp_path / "nonexistent.jsonl"
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(nonexistent),
+                "--path",
+                str(nonexistent),
             ],
             capture_output=True,
             text=True,
@@ -1416,18 +1510,19 @@ class TestStdoutStderrDiscipline:
         nonexistent = tmp_path / "missing.jsonl"
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(nonexistent),
+                "--path",
+                str(nonexistent),
             ],
             capture_output=True,
             text=True,
         )
         assert result.stdout == ""
         # stderr must be exactly one non-empty line
-        stderr_lines = [
-            ln for ln in result.stderr.splitlines() if ln.strip()
-        ]
+        stderr_lines = [ln for ln in result.stderr.splitlines() if ln.strip()]
         assert len(stderr_lines) == 1
 
     def test_stdout_on_success_is_pure_json(self) -> None:
@@ -1439,15 +1534,17 @@ class TestStdoutStderrDiscipline:
             no progress banners, no leading whitespace).
           - All four contract keys are present.
         """
-        fixture = (
-            _Path("tests/fixtures/session_summaries") / "happy_path.jsonl"
-        )
+        fixture = _Path("tests/fixtures/session_summaries") / "happy_path.jsonl"
         result = subprocess.run(
             [
-                sys.executable, "-m", "claude_usage",
+                sys.executable,
+                "-m",
+                "claude_usage",
                 "session-summary",
-                "--path", str(fixture),
-                "--format", "json",
+                "--path",
+                str(fixture),
+                "--format",
+                "json",
             ],
             capture_output=True,
             text=True,
@@ -1456,7 +1553,10 @@ class TestStdoutStderrDiscipline:
         # Must parse cleanly — no leading/trailing non-JSON text
         parsed = _json.loads(result.stdout)
         assert set(parsed.keys()) >= {
-            "project", "intent", "actions", "stoppedNaturally"
+            "project",
+            "intent",
+            "actions",
+            "stoppedNaturally",
         }
         # Exactly one trailing newline — the JSON document ends cleanly
         assert result.stdout.endswith("\n")
@@ -1499,9 +1599,7 @@ class TestRenderJson:
         summary = self._make_summary()
         output = render_json(summary)
         for line in output.splitlines():
-            assert line == line.rstrip(), (
-                f"Trailing whitespace on line: {line!r}"
-            )
+            assert line == line.rstrip(), f"Trailing whitespace on line: {line!r}"
 
     def test_render_json_handles_tri_state_true(self) -> None:
         """stopped_naturally=True → JSON literal ``true``."""
@@ -1536,8 +1634,7 @@ class TestRenderText:
         return SessionSummary(
             project="my-project",
             intent="Build something useful",
-            actions=actions if actions is not None
-                else ["Edited foo.py", "Ran pytest"],
+            actions=actions if actions is not None else ["Edited foo.py", "Ran pytest"],
             stopped_naturally=stopped_naturally,
         )
 

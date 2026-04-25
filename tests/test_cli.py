@@ -7,8 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 
 def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     """Helper: run `python -m claude_usage` with the given args."""
@@ -41,7 +39,14 @@ class TestFormatJson:
     def test_outputs_valid_json(self, sample_session_dir: Path):
         """dashboard --format json must write parseable JSON to stdout."""
         result = run_cli(
-            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            [
+                "dashboard",
+                "--format",
+                "json",
+                "--no-open",
+                "--data-dir",
+                str(sample_session_dir),
+            ],
             cwd=WORKTREE_ROOT,
         )
         assert result.returncode == 0, f"CLI failed:\n{result.stderr}"
@@ -51,7 +56,14 @@ class TestFormatJson:
     def test_has_expected_top_level_keys(self, sample_session_dir: Path):
         """JSON output must contain all expected top-level keys."""
         result = run_cli(
-            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            [
+                "dashboard",
+                "--format",
+                "json",
+                "--no-open",
+                "--data-dir",
+                str(sample_session_dir),
+            ],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -60,7 +72,14 @@ class TestFormatJson:
     def test_contains_aggregated_data(self, sample_session_dir: Path):
         """JSON output must reflect the parsed session data."""
         result = run_cli(
-            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            [
+                "dashboard",
+                "--format",
+                "json",
+                "--no-open",
+                "--data-dir",
+                str(sample_session_dir),
+            ],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -73,8 +92,16 @@ class TestFormatJson:
     def test_generated_at_is_iso8601(self, sample_session_dir: Path):
         """generated_at must be a valid ISO-8601 datetime string."""
         from datetime import datetime
+
         result = run_cli(
-            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            [
+                "dashboard",
+                "--format",
+                "json",
+                "--no-open",
+                "--data-dir",
+                str(sample_session_dir),
+            ],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -87,11 +114,15 @@ class TestFormatJson:
         result = run_cli(
             [
                 "dashboard",
-                "--format", "json",
+                "--format",
+                "json",
                 "--no-open",
-                "--data-dir", str(sample_session_dir),
-                "--limit-5h", "600000",
-                "--limit-7d", "4000000",
+                "--data-dir",
+                str(sample_session_dir),
+                "--limit-5h",
+                "600000",
+                "--limit-7d",
+                "4000000",
             ],
             cwd=WORKTREE_ROOT,
         )
@@ -105,7 +136,14 @@ class TestFormatJson:
     def test_limits_null_when_not_set(self, sample_session_dir: Path):
         """When no limit flags are passed, limits key is null."""
         result = run_cli(
-            ["dashboard", "--format", "json", "--no-open", "--data-dir", str(sample_session_dir)],
+            [
+                "dashboard",
+                "--format",
+                "json",
+                "--no-open",
+                "--data-dir",
+                str(sample_session_dir),
+            ],
             cwd=WORKTREE_ROOT,
         )
         data = json.loads(result.stdout)
@@ -128,15 +166,20 @@ class TestFormatJson:
         result = run_cli(
             [
                 "dashboard",
-                "--format", "json",
+                "--format",
+                "json",
                 "--no-open",
-                "--data-dir", str(sample_session_dir),
-                "--output", str(tmp_path / "out.html"),
+                "--data-dir",
+                str(sample_session_dir),
+                "--output",
+                str(tmp_path / "out.html"),
             ],
             cwd=WORKTREE_ROOT,
         )
         assert result.returncode == 0
-        assert not (tmp_path / "out.html").exists(), "HTML file should not be written in json mode"
+        assert not (
+            tmp_path / "out.html"
+        ).exists(), "HTML file should not be written in json mode"
 
 
 class TestFormatHtmlDefault:
@@ -147,8 +190,10 @@ class TestFormatHtmlDefault:
             [
                 "dashboard",
                 "--no-open",
-                "--data-dir", str(sample_session_dir),
-                "--output", str(output_path),
+                "--data-dir",
+                str(sample_session_dir),
+                "--output",
+                str(output_path),
             ],
             cwd=WORKTREE_ROOT,
         )
@@ -161,10 +206,13 @@ class TestFormatHtmlDefault:
         result = run_cli(
             [
                 "dashboard",
-                "--format", "html",
+                "--format",
+                "html",
                 "--no-open",
-                "--data-dir", str(sample_session_dir),
-                "--output", str(output_path),
+                "--data-dir",
+                str(sample_session_dir),
+                "--output",
+                str(output_path),
             ],
             cwd=WORKTREE_ROOT,
         )

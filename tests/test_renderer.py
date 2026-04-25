@@ -53,12 +53,12 @@ class TestResponsiveness:
         desktop view.
         """
         html = _render_html(tmp_path)
-        assert 'name="viewport"' in html, (
-            "Rendered HTML must contain a viewport meta tag."
-        )
-        assert "width=device-width" in html, (
-            "Viewport meta tag must include width=device-width."
-        )
+        assert (
+            'name="viewport"' in html
+        ), "Rendered HTML must contain a viewport meta tag."
+        assert (
+            "width=device-width" in html
+        ), "Viewport meta tag must include width=device-width."
 
     def test_gauge_grid_uses_auto_fill(self, tmp_path: Path) -> None:
         """Gauge grid must use auto-fill or responsive grid-template-columns.

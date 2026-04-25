@@ -30,24 +30,24 @@ DEFAULT_MAX_ACTIONS: int = 50
 _EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "NotebookEdit"})
 _BASH_TOOLS: frozenset[str] = frozenset({"Bash", "PowerShell"})
 _MAX_COMMAND_CHARS: int = 80
-SKIPPED_TOOLS: frozenset[str] = frozenset({
-    "Read",
-    "Grep",
-    "Glob",
-    "WebFetch",
-    "WebSearch",
-    "Skill",
-    "TodoWrite",
-})
+SKIPPED_TOOLS: frozenset[str] = frozenset(
+    {
+        "Read",
+        "Grep",
+        "Glob",
+        "WebFetch",
+        "WebSearch",
+        "Skill",
+        "TodoWrite",
+    }
+)
 
 _XML_WRAPPER_RE = re.compile(
     r"<(system-reminder|command-message|command-name"
     r"|command-args|local-command-stdout)>.*?</\1>",
     flags=re.DOTALL,
 )
-_SLASH_COMMAND_RE = re.compile(
-    r"<command-name>(/[^<]+)</command-name>"
-)
+_SLASH_COMMAND_RE = re.compile(r"<command-name>(/[^<]+)</command-name>")
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[\.\!\?])\s|\n")
 
 
@@ -200,10 +200,7 @@ def _derive_intent(entries: list[dict], project: str) -> str:
         A non-empty intent string.
     """
     for entry in entries:
-        if not (
-            entry.get("type") == "user"
-            and entry.get("userType") == "external"
-        ):
+        if not (entry.get("type") == "user" and entry.get("userType") == "external"):
             continue
         msg = entry.get("message", {})
         raw_content = msg.get("content", "")
@@ -252,14 +249,14 @@ def _normalize_mcp_tool_name(raw: str) -> str | None:
     """
     if not raw.startswith("mcp__"):
         return None
-    remainder = raw[len("mcp__"):]
+    remainder = raw[len("mcp__") :]
 
     # Strip the plugin segment if present.
     # Plugin form: plugin_<plugin>_<server>__<method>
     # After stripping "plugin_", the next segment is "<plugin>_<server>"
     # which is separated from <method> by "__".
     if remainder.startswith("plugin_"):
-        after_plugin = remainder[len("plugin_"):]
+        after_plugin = remainder[len("plugin_") :]
         # after_plugin is "<plugin>_<server>__<method>" — split once on "_"
         # to skip the plugin label, leaving "<server>__<method>".
         parts = after_plugin.split("_", 1)
@@ -591,9 +588,7 @@ def build_session_summary(
 
     # Render ActionRecords to strings, then apply the cap.
     action_strings_full = [r.summary for r in records]
-    action_strings = _apply_max_actions_cap(
-        action_strings_full, max_actions
-    )
+    action_strings = _apply_max_actions_cap(action_strings_full, max_actions)
 
     return SessionSummary(
         project=project,
@@ -644,9 +639,7 @@ def render_json(summary: SessionSummary) -> str:
     Returns:
         A JSON string without a trailing newline.
     """
-    return json.dumps(
-        _summary_to_dict(summary), indent=2, ensure_ascii=False
-    )
+    return json.dumps(_summary_to_dict(summary), indent=2, ensure_ascii=False)
 
 
 def _tri_state_to_word(value: bool | None) -> str:
@@ -723,12 +716,16 @@ def build_parser(
         help="Path to the transcript JSONL file.",
     )
     p.add_argument(
-        "--format", dest="output_format",
-        choices=["json", "text"], default="json",
+        "--format",
+        dest="output_format",
+        choices=["json", "text"],
+        default="json",
         help="Output format: 'json' (default) or 'text' (debug view).",
     )
     p.add_argument(
-        "--max-actions", type=int, default=DEFAULT_MAX_ACTIONS,
+        "--max-actions",
+        type=int,
+        default=DEFAULT_MAX_ACTIONS,
         dest="max_actions",
         help=(
             "Soft cap on emitted actions. 0 disables the cap. "
@@ -781,8 +778,7 @@ def run(args: argparse.Namespace) -> int:
 
     # ── Phase 4.2: no user turns ─────────────────────────────────────
     has_user_turns = any(
-        entry.get("type") == "user"
-        and entry.get("userType") == "external"
+        entry.get("type") == "user" and entry.get("userType") == "external"
         for entry in entries
     )
     if not has_user_turns:
@@ -797,8 +793,7 @@ def run(args: argparse.Namespace) -> int:
     skipped = non_blank_lines - len(entries)
     if skipped > 0:
         print(
-            f"session-summary: skipped {skipped} malformed line(s)"
-            f" in '{path}'",
+            f"session-summary: skipped {skipped} malformed line(s)" f" in '{path}'",
             file=sys.stderr,
         )
 

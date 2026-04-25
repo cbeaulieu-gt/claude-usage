@@ -6,7 +6,12 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from claude_usage.models import MessageRecord, SessionRecord, SkillPassedEvent, SkillInvokedEvent
+from claude_usage.models import (
+    MessageRecord,
+    SessionRecord,
+    SkillPassedEvent,
+    SkillInvokedEvent,
+)
 
 
 @dataclass
@@ -31,8 +36,12 @@ def _add_tokens(bucket: dict, msg: MessageRecord) -> None:
     bucket["total_tokens"] = bucket.get("total_tokens", 0) + msg.total_tokens
     bucket["input_tokens"] = bucket.get("input_tokens", 0) + msg.input_tokens
     bucket["output_tokens"] = bucket.get("output_tokens", 0) + msg.output_tokens
-    bucket["cache_read_tokens"] = bucket.get("cache_read_tokens", 0) + msg.cache_read_tokens
-    bucket["cache_creation_tokens"] = bucket.get("cache_creation_tokens", 0) + msg.cache_creation_tokens
+    bucket["cache_read_tokens"] = (
+        bucket.get("cache_read_tokens", 0) + msg.cache_read_tokens
+    )
+    bucket["cache_creation_tokens"] = (
+        bucket.get("cache_creation_tokens", 0) + msg.cache_creation_tokens
+    )
     bucket["message_count"] = bucket.get("message_count", 0) + 1
 
 
@@ -82,17 +91,21 @@ def aggregate(
 
             agents_in_session = sorted(set(m.agent_type for m in session_messages))
 
-            result.sessions.append({
-                "session_id": session.session_id,
-                "project": session.project,
-                "start_time": min(m.timestamp for m in session_messages).isoformat(),
-                "root_agent": session.root_agent,
-                "agents": agents_in_session,
-                "total_tokens": sum(m.total_tokens for m in session_messages),
-                "model_split": dict(model_tokens),
-                "duration_minutes": session.duration_minutes,
-                "message_count": len(session_messages),
-            })
+            result.sessions.append(
+                {
+                    "session_id": session.session_id,
+                    "project": session.project,
+                    "start_time": min(
+                        m.timestamp for m in session_messages
+                    ).isoformat(),
+                    "root_agent": session.root_agent,
+                    "agents": agents_in_session,
+                    "total_tokens": sum(m.total_tokens for m in session_messages),
+                    "model_split": dict(model_tokens),
+                    "duration_minutes": session.duration_minutes,
+                    "message_count": len(session_messages),
+                }
+            )
 
     result.total_tokens = sum(m.total_tokens for m in filtered_messages)
     result.total_messages = len(filtered_messages)
@@ -119,7 +132,9 @@ def aggregate(
         for agent in session_summary["agents"]:
             agent_session_count[agent].add(session_summary["session_id"])
     for agent in result.by_agent:
-        result.by_agent[agent]["session_count"] = len(agent_session_count.get(agent, set()))
+        result.by_agent[agent]["session_count"] = len(
+            agent_session_count.get(agent, set())
+        )
 
     for msg in filtered_messages:
         if msg.skill is None:
@@ -133,7 +148,11 @@ def aggregate(
     for session_summary in result.sessions:
         proj = session_summary["project"]
         if proj not in result.by_project:
-            result.by_project[proj] = {"total_tokens": 0, "session_count": 0, "message_count": 0}
+            result.by_project[proj] = {
+                "total_tokens": 0,
+                "session_count": 0,
+                "message_count": 0,
+            }
         result.by_project[proj]["total_tokens"] += session_summary["total_tokens"]
         result.by_project[proj]["message_count"] += session_summary["message_count"]
     for proj, sess_ids in project_sessions.items():
@@ -184,12 +203,15 @@ def compute_skill_adoption(
     result: dict[str, dict] = {}
     for skill, pass_list in passed_by_skill.items():
         times_invoked = sum(
-            1 for evt in pass_list
+            1
+            for evt in pass_list
             if evt.session_id in invoked_sessions.get(skill, set())
         )
         times_passed = len(pass_list)
 
-        by_agent: dict[str, dict[str, int]] = defaultdict(lambda: {"passed": 0, "invoked": 0})
+        by_agent: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"passed": 0, "invoked": 0}
+        )
         for evt in pass_list:
             by_agent[evt.target_agent]["passed"] += 1
             if evt.session_id in invoked_sessions.get(skill, set()):
@@ -198,7 +220,9 @@ def compute_skill_adoption(
         result[skill] = {
             "times_passed": times_passed,
             "times_invoked": times_invoked,
-            "adoption_rate": round(times_invoked / times_passed, 3) if times_passed > 0 else 0.0,
+            "adoption_rate": round(times_invoked / times_passed, 3)
+            if times_passed > 0
+            else 0.0,
             "by_target_agent": dict(by_agent),
         }
 

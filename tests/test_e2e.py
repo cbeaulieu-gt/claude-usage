@@ -34,7 +34,9 @@ class TestEndToEnd:
 
         limits = {"limit_5h": 600000, "limit_7d": 4000000, "limit_sonnet_7d": 2000000}
         output_path = tmp_path / "dashboard-limits.html"
-        rendered = render(result, output_path=output_path, open_browser=False, limits=limits)
+        rendered = render(
+            result, output_path=output_path, open_browser=False, limits=limits
+        )
         assert rendered.exists()
 
         html = rendered.read_text(encoding="utf-8")
@@ -51,15 +53,32 @@ class TestEndToEnd:
 
 
 class TestSkillAdoptionE2E:
-    def test_adoption_data_in_rendered_html(self, sample_session_dir: Path, tmp_path: Path):
+    def test_adoption_data_in_rendered_html(
+        self, sample_session_dir: Path, tmp_path: Path
+    ):
         """Verify skill adoption data appears in the rendered dashboard."""
         from claude_usage.aggregator import compute_skill_adoption
         from claude_usage.skill_tracking import parse_skill_tracking
 
         tracking_file = sample_session_dir / "skill-tracking.jsonl"
         lines = [
-            json.dumps({"event": "skill_passed", "skill": "python", "target_agent": "code-writer", "timestamp": "2026-04-09T21:00:00Z", "session_id": "test-1"}),
-            json.dumps({"event": "skill_invoked", "skill": "python", "timestamp": "2026-04-09T21:01:00Z", "session_id": "test-1"}),
+            json.dumps(
+                {
+                    "event": "skill_passed",
+                    "skill": "python",
+                    "target_agent": "code-writer",
+                    "timestamp": "2026-04-09T21:00:00Z",
+                    "session_id": "test-1",
+                }
+            ),
+            json.dumps(
+                {
+                    "event": "skill_invoked",
+                    "skill": "python",
+                    "timestamp": "2026-04-09T21:01:00Z",
+                    "session_id": "test-1",
+                }
+            ),
         ]
         tracking_file.write_text("\n".join(lines) + "\n")
 
@@ -133,7 +152,7 @@ class TestSubagentModelAttribution:
         ]
 
         (project_dir / f"{session_id}.jsonl").write_text(
-            "\n".join(json.dumps(l) for l in parent_lines), encoding="utf-8"
+            "\n".join(json.dumps(rec) for rec in parent_lines), encoding="utf-8"
         )
 
         # Subagent directory
@@ -142,7 +161,9 @@ class TestSubagentModelAttribution:
 
         # debugger subagent metadata
         (subagent_dir / "agent-debugger1.meta.json").write_text(
-            json.dumps({"agentType": "debugger", "description": "Debug the auth module"}),
+            json.dumps(
+                {"agentType": "debugger", "description": "Debug the auth module"}
+            ),
             encoding="utf-8",
         )
 
@@ -177,7 +198,7 @@ class TestSubagentModelAttribution:
         ]
 
         (subagent_dir / "agent-debugger1.jsonl").write_text(
-            "\n".join(json.dumps(l) for l in sub_lines), encoding="utf-8"
+            "\n".join(json.dumps(rec) for rec in sub_lines), encoding="utf-8"
         )
 
         return tmp_path
@@ -201,11 +222,13 @@ class TestSubagentModelAttribution:
             "debugger ran on claude-sonnet-4-6; primary_model must be 'sonnet', "
             f"got {result.by_agent['debugger']['primary_model']!r}"
         )
-        assert result.by_agent["general-purpose"]["primary_model"] == "opus", (
-            "general-purpose ran on claude-opus-4-6; primary_model must be 'opus'"
-        )
+        assert (
+            result.by_agent["general-purpose"]["primary_model"] == "opus"
+        ), "general-purpose ran on claude-opus-4-6; primary_model must be 'opus'"
 
-    def test_rendered_html_embeds_correct_primary_model_for_subagent(self, tmp_path: Path):
+    def test_rendered_html_embeds_correct_primary_model_for_subagent(
+        self, tmp_path: Path
+    ):
         """Rendered HTML must embed primary_model='sonnet' for debugger in DATA.by_agent.
 
         The dashboard JavaScript reads DATA.by_agent[agent].primary_model to
