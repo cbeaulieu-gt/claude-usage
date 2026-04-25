@@ -26,13 +26,13 @@
 - [x] **3.3** Full pytest suite — must pass.
 
 ### Phase 4 — CI workflow
-- [ ] **4.1** Write `.github/workflows/ci.yml` with:
+- [x] **4.1** Write `.github/workflows/ci.yml` with:
   - Triggers: `pull_request` and `push` on `main`.
   - `permissions: contents: read`.
   - `lint` job: `ubuntu-latest`, Python 3.10, `astral-sh/setup-uv@v5` with cache, `uv pip install -e .[dev]`, then `ruff check .` + `ruff format --check .`.
   - `test` job: matrix `os: [ubuntu-latest, windows-latest]`, Python 3.10, same uv setup, `pytest`.
-- [ ] **4.2** Lint and test jobs are separate top-level jobs (not sequential steps in one job) — per `feedback_ci_split_lint_and_test.md`, distinct check entries make failure source obvious at a glance.
-- [ ] **4.3** Validate YAML syntax locally with `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`.
+- [x] **4.2** Lint and test jobs are separate top-level jobs (not sequential steps in one job) — per `feedback_ci_split_lint_and_test.md`, distinct check entries make failure source obvious at a glance.
+- [x] **4.3** Validate YAML syntax locally with `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`.
 
 ### Phase 5 — README
 - [ ] **5.1** Add a "Development" section to `README.md` between "Subcommands" and wherever makes structural sense. Cover: `uv pip install -e .[dev]`, `pytest`, `ruff check`, `ruff format`.
