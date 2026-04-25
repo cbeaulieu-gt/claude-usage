@@ -35,8 +35,8 @@
 - [x] **4.3** Validate YAML syntax locally with `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`.
 
 ### Phase 5 — README
-- [ ] **5.1** Add a "Development" section to `README.md` between "Subcommands" and wherever makes structural sense. Cover: `uv pip install -e .[dev]`, `pytest`, `ruff check`, `ruff format`.
-- [ ] **5.2** No other README sections modified.
+- [x] **5.1** Add a "Development" section to `README.md` between "Subcommands" and wherever makes structural sense. Cover: `uv pip install -e .[dev]`, `pytest`, `ruff check`, `ruff format`.
+- [x] **5.2** No other README sections modified.
 
 ### Phase 6 — PR + verification
 - [ ] **6.1** Push `feature/ci` and open PR with body containing plain-text `Closes #32` (no backticks).

@@ -149,7 +149,33 @@ Reads JSONL session files from `~/.claude/projects/`. Each session file contains
 
 ## Development
 
+### Setup
+
 ```bash
-pip install -e ".[dev]"
-pytest
+git clone https://github.com/cbeaulieu-gt/claude-usage.git
+cd claude-usage
+uv pip install -e ".[dev]"   # installs runtime + ruff + pytest
 ```
+
+### Testing
+
+```bash
+pytest                # ~151 tests, typically finishes in under 5 seconds
+```
+
+### Linting & formatting
+
+```bash
+ruff check .          # lint
+ruff format .         # autoformat in-place
+ruff format --check . # format gate (used in CI — exits non-zero on drift)
+```
+
+### CI
+
+GitHub Actions runs on every PR and push to `main`:
+
+- **lint** (Ubuntu): `ruff check .` + `ruff format --check .`
+- **test** (Ubuntu + Windows, Python 3.10): `pytest`
+
+Both jobs must be green before a PR can merge.
